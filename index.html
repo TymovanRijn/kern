@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kern">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="core/core.css">
+<title>Kern</title>
+</head>
+<body>
+
+<section class="view on" id="v-home">
+  <div class="top"><button class="fab" data-act="check" aria-label="Ochtendcheck">+</button></div>
+  <h1>Vandaag</h1>
+  <div class="sub" id="home-sub"></div>
+  <div id="home-body"></div>
+</section>
+
+<section class="view" id="v-rec">
+  <div class="top"><button class="fab" data-act="check" aria-label="Ochtendcheck">+</button></div>
+  <h1>Herstel</h1>
+  <div class="sub" id="rec-sub"></div>
+  <div id="rec-body"></div>
+</section>
+
+<section class="view" id="v-apps">
+  <div class="top"></div>
+  <h1>Onderdelen</h1>
+  <div class="sub">Eén app, één plek voor je gegevens</div>
+  <div class="grid2" id="apps"></div>
+  <div class="hint" style="margin-top:18px"><button class="info" data-info="linked" style="padding:0">Hoe zijn de onderdelen verbonden?</button></div>
+</section>
+
+<section class="view" id="v-set">
+  <div class="top"></div>
+  <h1>Instellingen</h1>
+  <div class="sub">Profiel, back-up en uitleg</div>
+  <div class="label">Profiel</div>
+  <div class="card">
+    <div class="field"><label>Lichaamsgewicht (kg)</label><input id="p-weight" type="number" inputmode="decimal"></div>
+    <div class="hint">Gebruikt door Eten om je doelen te berekenen. Blijft op je toestel.</div>
+  </div>
+  <div class="label">Back-up</div>
+  <div class="card">
+    <button class="btn pri" id="d-export" style="margin-top:0">Back-up maken</button>
+    <button class="btn" id="d-import">Back-up terugzetten</button>
+    <input type="file" id="d-file" accept="application/json,.json" hidden>
+    <div class="hint">Eén bestand met de gegevens van Vandaag, Tempo, Kracht, Eten en Geld. Bewaar het in Bestanden of iCloud Drive. Inloggegevens van Strava gaan niet mee. Amifo heeft een eigen back-up in zijn instellingen.</div>
+  </div>
+  <div class="label">Data</div>
+  <div class="card">
+    <button class="btn" id="d-demo" style="margin-top:0">Wis alle demodata</button>
+    <button class="btn danger" id="d-reset">Alles wissen</button>
+  </div>
+  <div class="label">Wetenschap</div>
+  <div class="list" id="science-list"></div>
+  <div class="hint" style="text-align:center;margin-top:24px">Kern · alles staat lokaal op je toestel, zonder account en zonder server</div>
+</section>
+
+<nav class="tabbar">
+  <button class="on" data-tab="home"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.500v2.500M12 19v2.500M2.500 12H5M19 12h2.500M5.300 5.300 7 7M17 17l1.700 1.700M18.700 5.300 17 7M7 17l-1.700 1.700"/></svg>Vandaag</button>
+  <button data-tab="rec"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Herstel</button>
+  <button data-tab="apps"><svg viewBox="0 0 24 24"><rect x="3.500" y="3.500" width="7" height="7" rx="2"/><rect x="13.500" y="3.500" width="7" height="7" rx="2"/><rect x="3.500" y="13.500" width="7" height="7" rx="2"/><rect x="13.500" y="13.500" width="7" height="7" rx="2"/></svg>Onderdelen</button>
+  <button data-tab="set"><svg viewBox="0 0 24 24"><path d="M6 4v6M6 14v6M12 4v2M12 10v10M18 4v10M18 18v2"/><path d="M4 12h4M10 8h4M16 16h4"/></svg>Instellingen</button>
+</nav>
+
+<script src="core/core.js"></script>
+<script>
+/* =========================================================
+   Kern — startscherm. Ochtendcheck (HRV, rusthartslag, slaap)
+   en één overzicht van wat de onderdelen vandaag te melden hebben.
+   ========================================================= */
+K.chrome('hub');
+const {$,$$,esc,dkey,DAY,nl,eur,toast,openSheet,closeSheet,ringSVG,addDays,pd,mean,sd}=K;
+const KEY='kern.check.v1';
+const DEF={days:{},demo:false,seeded:false};
+let st=K.load(KEY,DEF);
+const save=()=>K.save(KEY,st);
+const today=()=>dkey(new Date());
+
+/* ---------- HRV-analyse ---------- */
+// Alles op ln(rMSSD): HRV is scheef verdeeld, de logaritme maakt gemiddelden en bandbreedtes zinvol.
+function entries(n=400){const cut=dkey(addDays(new Date(),-n));return Object.entries(st.days).filter(([k,v])=>k>=cut&&v.hrv>0).map(([k,v])=>({k,...v,ln:Math.log(v.hrv)})).sort((a,b)=>a.k.localeCompare(b.k))}
+function analyse(){
+  const all=entries(),t=today(),within=(a,b)=>all.filter(e=>{const n=Math.round((pd(t)-pd(e.k))/DAY);return n>=a&&n<b});
+  const w7=within(0,7),w60=within(0,60),a=within(0,28),b=within(28,56);
+  const o={n:all.length,all,ok:w60.length>=10&&w7.length>=3};
+  if(w7.length)o.base=Math.exp(mean(w7.map(e=>e.ln)));
+  if(w7.length)o.rhr=mean(w7.filter(e=>e.rhr).map(e=>e.rhr));
+  if(w60.length>=5){const m=mean(w60.map(e=>e.ln)),s=sd(w60.map(e=>e.ln));o.m=m;o.s=s;o.lo=Math.exp(m-s);o.hi=Math.exp(m+s)}
+  if(w7.length>=4)o.cv=sd(w7.map(e=>e.hrv))/mean(w7.map(e=>e.hrv))*100;
+  if(a.length>=8&&b.length>=8){o.dHrv=(Math.exp(mean(a.map(e=>e.ln)))/Math.exp(mean(b.map(e=>e.ln)))-1)*100;
+    const ra=a.filter(e=>e.rhr),rb=b.filter(e=>e.rhr);if(ra.length>=8&&rb.length>=8)o.dRhr=mean(ra.map(e=>e.rhr))-mean(rb.map(e=>e.rhr))}
+  o.sleep=mean(a.filter(e=>e.sleep).map(e=>e.sleep));
+  // status van de 7-daagse basislijn ten opzichte van je normale bandbreedte
+  if(o.ok){o.state=o.base<o.lo?{t:'Onder je normale bandbreedte: je lichaam herstelt nog',c:'var(--c-warn)'}
+      :o.cv>12?{t:'Binnen je bandbreedte, maar onrustig van dag tot dag',c:'var(--c-mid)'}
+      :o.base>o.hi?{t:'Boven je normale bandbreedte: goed hersteld',c:'var(--c-peak)'}
+      :{t:'Binnen je normale bandbreedte: stabiel',c:'var(--c-good)'}}
+  else o.state={t:`Nog ${Math.max(1,10-w60.length)} metingen nodig voor je eigen bandbreedte`,c:'var(--text-2)'};
+  return o}
+const hrvColor=(v,A)=>!A.lo?'var(--text)':v<A.lo?'var(--c-warn)':v>A.hi?'var(--c-peak)':'var(--c-good)';
+
+/* ---------- advies: check + trainingsvorm + schema ---------- */
+function advice(A){
+  const c=st.days[today()],f=K.feed.get('tempo'),s=f?.days?.[today()],flags=[];
+  if(c){
+    if(A.lo&&c.hrv<A.lo)flags.push('je HRV ligt onder je bandbreedte');
+    if(A.rhr&&c.rhr&&c.rhr>A.rhr+5)flags.push('je rusthartslag is hoger dan normaal');
+    if(c.sleep&&c.sleep<6.5)flags.push('je sliep kort');
+    if(c.legs&&c.legs<=2)flags.push('je benen voelen zwaar')}
+  if(f&&f.tsb<-25)flags.push(`je vorm in Tempo is ${f.tsb}`);
+  const what=s?(s.sport==='rest'?'Rustdag in je schema':`Gepland: <b>${esc(s.t)}</b>`):'Geen training in je schema';
+  const hard=s&&['hard','long','race'].includes(s.cls);
+  let chip,col,txt;
+  if(!c&&!flags.length){chip='';col='var(--text-2)';txt=`${what}. Doe de ochtendcheck voor een advies op maat.`}
+  else if(!flags.length){chip='Groen licht';col='var(--c-peak)';txt=`${what}. Alles wijst op goed herstel${hard?': een goede dag om deze sessie voluit te doen':''}.`}
+  else if(flags.length===1){chip='Let op';col='var(--c-mid)';txt=`${what}. Let op: ${flags[0]}. ${hard?'Begin rustig en kort de sessie in als het niet loopt.':'Houd het vandaag rustig.'}`}
+  else{chip='Rustig aan';col='var(--c-warn)';txt=`${what}. ${(l=>l[0].toUpperCase()+l.slice(1))(flags.slice(0,-1).join(', ')+' en '+flags[flags.length-1])}. ${hard?'Maak hier een rustige versie van of schuif de sessie een dag op.':'Herstel heeft vandaag voorrang.'}`}
+  return{chip,col,txt}}
+
+/* ---------- vandaag ---------- */
+const fresh=f=>f&&f.updated>=+K.today0();
+function renderHome(){
+  const A=analyse(),c=st.days[today()],ad=advice(A);
+  $('#home-sub').textContent=new Date().toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});
+  const t=K.feed.get('tempo'),kr=K.feed.get('kracht'),e=K.feed.get('eten'),g=K.feed.get('geld');
+  const ts=t?.days?.[today()];
+  const check=c?`<div class="card tap" data-act="check">
+      <div class="hero"><div><div class="big" style="color:${hrvColor(c.hrv,A)}">${c.hrv}<small>ms HRV</small></div></div><div class="right">${A.state.t}</div></div>
+      <div class="stats"><div class="stat"><div class="v">${c.rhr||'—'}</div><div class="k">rusthartslag</div></div><div class="stat"><div class="v">${c.sleep?nl(c.sleep)+' u':'—'}</div><div class="k">slaap</div></div><div class="stat"><div class="v">${c.legs?c.legs+'/5':'—'}</div><div class="k">benen</div></div></div>
+    </div>`
+    :`<div class="card"><div class="card-h"><h3>Ochtendcheck</h3><button class="info" data-info="measure">Hoe meet ik?</button></div>
+      <div class="advice muted" style="margin:6px 0 14px">Twintig seconden: je HRV en rusthartslag van vanochtend, hoe je sliep en hoe je benen voelen.</div>
+      <button class="btn pri" data-act="check" style="margin-top:0">Start ochtendcheck</button></div>`;
+  const row=(href,ttl,body,chip='')=>`<a class="card tap" href="${href}"><div class="card-h"><h3>${ttl}</h3><span>${chip?`<span class="chip">${chip}</span> `:''}<span class="go">›</span></span></div><div class="advice" style="font-size:16px">${body}</div></a>`;
+  $('#home-body').innerHTML=check+`
+  <div class="card"><div class="card-h"><h3>Advies voor vandaag</h3><span class="chip" style="color:${ad.col}">${ad.chip}</span></div><div class="advice">${ad.txt}</div></div>
+  <div class="label">Vandaag in je onderdelen</div>`
+  +row('tempo/','Training',t?`${ts?`<b>${esc(ts.t)}</b>${ts.d?`<br><span class="muted">${esc(ts.d)}</span>`:''}`:'Geen sessie gepland'}<br><span class="muted">Vorm ${t.tsb>0?'+':''}${t.tsb} · fitness ${t.ctl} · ${t.week?.runKm??0} km gelopen in 7 dgn</span>`:'<span class="muted">Open Tempo om je schema en vorm te zien.</span>',t?.doneToday?'✓ gedaan':'')
+  +row('kracht/','Kracht',kr?`${kr.week.n} ${kr.week.n===1?'sessie':'sessies'} deze week${kr.last?` · laatste ${K.relDay(kr.last.date)}`:''}${kr.active?'<br><b>Er staat een training open</b>':''}`:'<span class="muted">Open Kracht om een training te starten.</span>',kr?.doneToday?'✓ gedaan':'')
+  +row('eten/','Eten',fresh(e)?`<b>${e.today.target} g koolhydraten</b> · ${e.today.label.toLowerCase()}<br><span class="muted">${e.today.meals.filter(m=>m.slot!=='Extra tussendoor').map(m=>esc(m.n)).join(' · ')}</span>`:'<span class="muted">Open Eten voor het menu van vandaag.</span>')
+  +row('eten/','Boodschappen',e?.list?`${e.list.left} van ${e.list.n} producten nog te kopen<br><span class="muted">Weekmenu geschat op ${eur(e.list.cost)}${g?` · ${eur(g.groceries7)} uitgegeven in 7 dgn`:''}</span>`:'<span class="muted">De lijst volgt uit je weekmenu in Eten.</span>')
+  +row('geld/','Geld',g?`<b>${eur(g.month.spent)}</b> uit deze maand<br><span class="muted">${g.fixed.n} vaste posten · ${eur(g.fixed.monthly)} per maand</span>`:'<span class="muted">Open Geld om je uitgaven te zien.</span>')
+  +row('amifo/','Vrienden','<span class="muted">Amifo: je vriendenboek, met eigen vergrendeling.</span>');
+}
+
+/* ---------- herstel ---------- */
+function renderRec(){
+  const A=analyse(),all=A.all.filter(e=>pd(today())-pd(e.k)<60*DAY);
+  $('#rec-sub').textContent=A.n?`${A.n} metingen${st.demo?' · demo':''}`:'Nog geen metingen';
+  if(!A.n){$('#rec-body').innerHTML=`<div class="card"><div class="advice">Doe elke ochtend de check. Na ongeveer tien metingen zie je hier je eigen bandbreedte, je basislijn en of je vooruitgaat.</div><button class="btn pri" data-act="check">Start ochtendcheck</button></div>`;return}
+  const W=320,H=130,t0=pd(today()),X=k=>(59-Math.round((t0-pd(k))/DAY))/59*(W-12)+6;
+  const vals=all.map(e=>e.hrv).concat(A.lo?[A.lo,A.hi]:[]),mn=Math.min(...vals)*.94,mx=Math.max(...vals)*1.04,Y=v=>H-8-(v-mn)/(mx-mn||1)*(H-16);
+  const roll=all.map(e=>{const w=A.all.filter(x=>{const n=Math.round((pd(e.k)-pd(x.k))/DAY);return n>=0&&n<7});return w.length>=3?{k:e.k,v:Math.exp(mean(w.map(x=>x.ln)))}:null}).filter(Boolean);
+  const path=(pts,f)=>pts.map((p,i)=>(i?'L':'M')+X(p.k).toFixed(1)+' '+Y(f(p)).toFixed(1)).join('');
+  const rh=all.filter(e=>e.rhr),rmn=Math.min(...rh.map(e=>e.rhr))-2,rmx=Math.max(...rh.map(e=>e.rhr))+2,RY=v=>90-6-(v-rmn)/(rmx-rmn||1)*(90-12);
+  const dC=v=>v==null?'var(--text)':v>1?'var(--c-peak)':v<-3?'var(--c-warn)':'var(--text)';
+  const verdict=A.dHrv==null?'Na acht weken meten zie je hier of je vooruitgaat.':A.dHrv>2&&(A.dRhr??0)<=0?'Je HRV stijgt en je rusthartslag daalt: je wordt fitter.':A.dHrv<-5?'Je HRV daalt over weken: neem meer herstel of kijk naar slaap en stress.':'Stabiel: geen duidelijke verandering in vier weken.';
+  $('#rec-body').innerHTML=`
+  <div class="card">
+    <div class="hero"><div><div class="big">${A.base?Math.round(A.base):'—'}<small>ms · 7 dgn</small></div></div><div class="right" style="color:${A.state.c==='var(--text-2)'?'var(--text-2)':'var(--text-2)'}">${A.state.t}</div></div>
+    <svg class="chart" viewBox="0 0 ${W} ${H}">
+      ${A.lo?`<rect x="0" y="${Y(A.hi).toFixed(1)}" width="${W}" height="${(Y(A.lo)-Y(A.hi)).toFixed(1)}" fill="#30c46a" opacity=".13" rx="6"/>`:''}
+      ${all.map(e=>`<circle cx="${X(e.k).toFixed(1)}" cy="${Y(e.hrv).toFixed(1)}" r="2.200" fill="#636366"/>`).join('')}
+      ${roll.length>1?`<path d="${path(roll,p=>p.v)}" stroke="#30c46a" stroke-width="2.600" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`:''}
+    </svg>
+    <div class="legend" style="margin-top:12px"><span style="--d:var(--c-peak)">Basislijn 7 dgn</span><span style="--d:#636366">Dagmeting</span><button class="info" data-info="hrv">Hoe werkt dit?</button></div>
+    ${A.lo?`<div class="hint">Je normale bandbreedte (groene band): ${Math.round(A.lo)}–${Math.round(A.hi)} ms.</div>`:''}
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>Rusthartslag</h3><button class="info" data-info="rhr">?</button></div>
+    <div class="sm-big">${A.rhr?Math.round(A.rhr):'—'}<small>slagen per minuut · 7 dgn</small></div>
+    ${rh.length>1?`<svg class="chart" viewBox="0 0 ${W} 90"><path d="${rh.map((p,i)=>(i?'L':'M')+X(p.k).toFixed(1)+' '+RY(p.rhr).toFixed(1)).join('')}" stroke="#98989f" stroke-width="2.200" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>Ga ik vooruit?</h3><button class="info" data-info="trend">?</button></div>
+    <div class="advice" style="margin-bottom:10px">${verdict}</div>
+    <div class="row"><span>HRV · 4 weken</span><b style="color:${dC(A.dHrv)}">${A.dHrv==null?'—':(A.dHrv>0?'+':'')+nl(A.dHrv,1)+'%'}</b></div>
+    <div class="row"><span>Rusthartslag · 4 weken</span><b style="color:${A.dRhr==null?'var(--text)':A.dRhr<-.5?'var(--c-peak)':A.dRhr>2?'var(--c-warn)':'var(--text)'}">${A.dRhr==null?'—':(A.dRhr>0?'+':'')+nl(A.dRhr,1)+' sl/min'}</b></div>
+    <div class="row"><span>Schommeling van dag tot dag</span><b style="color:${A.cv>12?'var(--c-mid)':'var(--text)'}">${A.cv==null?'—':nl(A.cv,0)+'%'}</b></div>
+    <div class="row"><span>Slaap gemiddeld</span><b>${A.sleep?nl(A.sleep,1)+' uur':'—'}</b></div>
+  </div>
+  <div class="label">Metingen</div>
+  <div class="list">${[...A.all].reverse().slice(0,21).map(e=>`<div class="item plain" data-day="${e.k}"><div class="meta"><div class="nm">${K.relDay(pd(e.k))[0].toUpperCase()+K.relDay(pd(e.k)).slice(1)}</div><div class="ds">${[e.rhr?'rusthartslag '+e.rhr:null,e.sleep?nl(e.sleep)+' u slaap':null,e.legs?'benen '+e.legs+'/5':null].filter(Boolean).join(' · ')}</div></div><div class="sc" style="color:${hrvColor(e.hrv,A)}">${e.hrv}</div></div>`).join('')}</div>`;
+  $$('[data-day]').forEach(b=>b.onclick=()=>checkSheet(b.dataset.day));
+}
+
+/* ---------- ochtendcheck ---------- */
+function checkSheet(k=today()){const c=st.days[k]||{};let legs=c.legs||0,mood=c.mood||0;
+  const sc=(id,v)=>`<div class="scale" id="${id}">${[1,2,3,4,5].map(n=>`<button data-v="${n}" class="${v===n?'on':''}">${n}</button>`).join('')}</div>`;
+  openSheet(`<h2>Ochtendcheck</h2><div class="muted" style="margin-bottom:8px">${k===today()?'Vandaag':pd(k).toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'})} · meet liggend, direct na het wakker worden</div>
+    <div class="field"><label>HRV (rMSSD, ms)</label><input id="c-hrv" type="number" inputmode="numeric" value="${c.hrv||''}" placeholder="62"></div>
+    <div class="field"><label>Rusthartslag</label><input id="c-rhr" type="number" inputmode="numeric" value="${c.rhr||''}" placeholder="48"></div>
+    <div class="field"><label>Slaap (uren)</label><input id="c-sleep" type="text" inputmode="decimal" value="${c.sleep?nl(c.sleep):''}" placeholder="7,5"></div>
+    <div class="field col"><label>Benen <span class="muted">(1 zwaar · 5 fris)</span></label>${sc('c-legs',legs)}</div>
+    <div class="field col"><label>Zin om te trainen <span class="muted">(1 geen · 5 veel)</span></label>${sc('c-mood',mood)}</div>
+    <button class="btn pri" id="c-save">Opslaan</button>${st.days[k]?'<button class="btn danger" id="c-del">Verwijderen</button>':''}
+    <div class="hint" style="text-align:center"><button class="info" data-info="measure">Hoe meet ik nauwkeurig?</button></div>`);
+  const bind=(id,set)=>$$('#'+id+' button').forEach(b=>b.onclick=()=>{$$('#'+id+' button').forEach(x=>x.classList.toggle('on',x===b));set(+b.dataset.v)});
+  bind('c-legs',v=>legs=v);bind('c-mood',v=>mood=v);
+  $('#c-save').onclick=()=>{const hrv=Math.round(+$('#c-hrv').value),rhr=Math.round(+$('#c-rhr').value),sleep=+String($('#c-sleep').value).replace(',','.');
+    if(hrv&&(hrv<5||hrv>300))return toast('HRV lijkt niet te kloppen (5–300 ms)');
+    if(rhr&&(rhr<25||rhr>130))return toast('Rusthartslag lijkt niet te kloppen');
+    if(!hrv&&!rhr&&!sleep&&!legs)return toast('Vul minstens één waarde in');
+    st.days[k]={hrv:hrv||0,rhr:rhr||0,sleep:sleep>0&&sleep<=16?sleep:0,legs,mood};save();closeSheet();render();toast('Opgeslagen')};
+  const del=$('#c-del');if(del)del.onclick=()=>{delete st.days[k];save();closeSheet();render()};
+}
+document.addEventListener('click',e=>{if(e.target.closest('[data-act=check]'))checkSheet()});
+
+/* ---------- onderdelen ---------- */
+const APPS=[
+  {h:'tempo/',n:'Tempo',i:'<path d="M3 12h4l3-8 4 16 3-8h4"/>',f:()=>{const t=K.feed.get('tempo');return t?`Vorm ${t.tsb>0?'+':''}${t.tsb} · fitness ${t.ctl}`:'Duurtraining, schema en vorm'}},
+  {h:'kracht/',n:'Kracht',i:'<path d="M6.500 6.500v11M17.500 6.500v11M3.500 9.500v5M20.500 9.500v5M6.500 12h11"/>',f:()=>{const k=K.feed.get('kracht');return k?`${k.week.n} sessies deze week`:'Krachtlog met rusttimer'}},
+  {h:'eten/',n:'Eten',i:'<path d="M7 3v8M4.500 3v5a2.500 2.500 0 0 0 5 0V3M7 11v10M17 3c-2 1.500-3 4-3 7h3M17 3v18"/>',f:()=>{const e=K.feed.get('eten');return e?.list?`${e.list.left} boodschappen te doen`:'Plantaardig weekmenu en boodschappen'}},
+  {h:'geld/',n:'Geld',i:'<circle cx="12" cy="12" r="9"/><path d="M15 8.500c-.700-.900-1.700-1.300-3-1.300-3 0-3.500 4.800 0 4.800s3.500 4.800 0 4.800c-1.300 0-2.400-.500-3-1.400M12 5.500v13"/>',f:()=>{const g=K.feed.get('geld');return g?`${eur(g.month.spent)} uit deze maand`:'Uitgaven en vaste lasten'}},
+  {h:'amifo/',n:'Amifo',i:'<circle cx="9" cy="8" r="3.500"/><path d="M2.500 20c.500-3.500 3-5.500 6.500-5.500s6 2 6.500 5.500M16 4.800a3.500 3.500 0 0 1 0 6.400M18 14.800c2 .700 3.200 2.500 3.500 5.200"/>',f:()=>'Vriendenboek'}
+];
+function renderApps(){$('#apps').innerHTML=APPS.map(a=>`<a class="app-tile" href="${a.h}"><div class="ic" style="background:var(--card-2)"><svg viewBox="0 0 24 24">${a.i}</svg></div><div class="n">${a.n}</div><div class="t">${a.f()}</div></a>`).join('')}
+
+/* ---------- instellingen ---------- */
+const INFO={
+  measure:{t:'Zo meet je nauwkeurig',s:'Elke ochtend op dezelfde manier',b:`<p>HRV (=hartslagvariabiliteit: de kleine verschillen in tijd tussen opeenvolgende hartslagen) zegt alleen iets als je elke dag <b>op dezelfde manier</b> meet:</p><ul><li>direct na het wakker worden, na een toiletbezoek, vóór koffie</li><li>liggend of zittend, maar altijd hetzelfde</li><li>één tot twee minuten, rustig ademend</li></ul><p>Een borstband die de hartslag elektrisch meet (zoals een Polar H10) met een HRV-app is hiervoor het nauwkeurigst. Neem uit die app de <b>rMSSD</b> in milliseconden en je rusthartslag over. Een horloge dat ’s nachts meet kan ook, zolang je steeds dezelfde bron gebruikt.</p><p><b>Kritisch:</b> meng geen bronnen: de nachtwaarde van een horloge en een ochtendmeting met borstband zijn niet met elkaar te vergelijken. Sommige horloges geven SDNN in plaats van rMSSD; dat is een andere maat.</p><p class="ref">Plews et al. (2013) Sports Med · Esco & Flatt (2014) J Sports Sci Med · Task Force ESC/NASPE (1996) Circulation</p>`},
+  hrv:{t:'HRV: basislijn en bandbreedte',s:'Waarom één meting weinig zegt',b:`<p>HRV schommelt van dag tot dag sterk. Daarom kijkt de app niet naar de losse meting, maar naar je <b>basislijn</b>: het gemiddelde van de afgelopen zeven dagen.</p><p>Die basislijn wordt vergeleken met je <b>normale bandbreedte</b>: het gemiddelde van de afgelopen 60 dagen plus en min één standaarddeviatie (=maat voor de gebruikelijke spreiding). Alle berekeningen gebeuren op de natuurlijke logaritme van rMSSD, omdat HRV scheef verdeeld is.</p><ul><li>basislijn binnen de band: stabiel</li><li>eronder: je lichaam verwerkt meer dan het aankan (training, slaaptekort, stress, beginnende ziekte)</li><li>sterke schommeling van dag tot dag (meer dan ongeveer 12%): vaak een vroeg teken van te veel belasting</li></ul><p><b>Kritisch:</b> de grenzen (één standaarddeviatie, 12%) zijn gangbare keuzes, geen natuurwetten. Een hoge HRV is niet altijd goed: bij zware vermoeidheid kan hij juist oplopen. Kijk altijd samen met hoe je je voelt.</p><p class="ref">Plews et al. (2012) Eur J Appl Physiol · Plews et al. (2013) Sports Med · Buchheit (2014) Front Physiol · Bellenger et al. (2016) Sports Med</p>`},
+  rhr:{t:'Rusthartslag',s:'Traag signaal, makkelijk te meten',b:`<p>Je rusthartslag daalt als je uithoudingsvermogen verbetert, doordat je hart per slag meer bloed rondpompt. Dat gaat over weken tot maanden.</p><p>Op korte termijn is een rusthartslag die vijf of meer slagen boven je gemiddelde ligt een waarschuwing: vaak vermoeidheid, uitdroging, alcohol of een infectie die eraan komt.</p><p><b>Kritisch:</b> rusthartslag is minder gevoelig dan HRV en reageert ook op warmte, cafeïne en houding. Vergelijk alleen metingen die op dezelfde manier zijn gedaan.</p><p class="ref">Buchheit (2014) Front Physiol · Reimers et al. (2018) J Clin Med</p>`},
+  trend:{t:'Ga ik vooruit?',s:'Vier weken tegenover de vier weken ervoor',b:`<p>De app vergelijkt het gemiddelde van de afgelopen 28 dagen met de 28 dagen daarvoor. Een <b>stijgende HRV samen met een dalende of gelijke rusthartslag</b> past bij een beter uithoudingsvermogen en goed herstel.</p><p>Daalt je HRV over weken met meer dan ongeveer 5%, dan vraagt je lichaam meer herstel dan het krijgt.</p><p><b>Kritisch:</b> dit zijn groepsbevindingen. Bij goed getrainde sporters kan HRV in een zware opbouwfase tijdelijk dalen en vlak voor een wedstrijd juist weer stijgen, zonder dat er iets mis is. Gebruik de trend als aanleiding om na te denken, niet als oordeel.</p><p class="ref">Plews et al. (2013) Sports Med · Bellenger et al. (2016) Sports Med · Vesterinen et al. (2016) Scand J Med Sci Sports</p>`},
+  linked:{t:'Hoe de onderdelen verbonden zijn',s:'Eén app, gedeelde opslag op je toestel',b:`<p>Alle onderdelen draaien binnen één app en bewaren hun gegevens in dezelfde lokale opslag op je toestel. Elk onderdeel publiceert daarnaast een korte samenvatting die de andere mogen lezen:</p><ul><li><b>Tempo → Eten:</b> het soort training per dag bepaalt je koolhydraatdoel en de porties; de dagen voor je wedstrijd schakelt het menu naar stapelen</li><li><b>Tempo → Kracht:</b> waarschuwing als je zware benen plant vlak voor een sleuteltraining</li><li><b>Kracht → Tempo:</b> krachtsessies tellen mee in je vermoeidheid en vorm</li><li><b>Eten → Geld:</b> de geschatte prijs van je weekmenu naast wat je echt uitgaf</li><li><b>Kracht → Geld:</b> je sportkosten per krachtsessie</li><li><b>Alles → Vandaag:</b> je ochtendcheck, vorm en schema worden één advies</li></ul><p>Er is geen account en geen server. Alleen de Strava-koppeling in Tempo maakt verbinding met internet, als je die instelt.</p><p><b>Kritisch:</b> je gegevens staan alleen op dit toestel. Verwijder je de app of wis je de websitegegevens, dan zijn ze weg. Maak dus regelmatig een back-up.</p>`}
+};
+function renderSet(){
+  $('#p-weight').value=K.profile().weight;
+  $('#science-list').innerHTML=Object.entries(INFO).map(([k,v])=>`<div class="item plain" data-info="${k}"><div class="meta"><div class="nm">${v.t}</div><div class="ds">${v.s}</div></div><span class="muted">›</span></div>`).join('');
+}
+$('#p-weight').onchange=e=>{const p=K.profile();p.weight=Math.max(35,Math.min(150,+String(e.target.value).replace(',','.')||70));K.saveProfile(p);toast('Opgeslagen')};
+$('#d-export').onclick=()=>K.exportAll();
+$('#d-import').onclick=()=>$('#d-file').click();
+$('#d-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  try{const n=K.importAll(await f.text());st=K.load(KEY,DEF);render();refreshFeeds(true);toast(`Back-up teruggezet (${n} onderdelen)`)}catch(err){toast('Terugzetten mislukt: '+err.message)}e.target.value=''};
+$('#d-demo').onclick=()=>{
+  // elk onderdeel markeert zijn eigen demoregels; hier worden ze in één keer verwijderd
+  const edit=(k,fn)=>{try{const s=JSON.parse(localStorage.getItem(k));if(s){fn(s);s.demo=false;K.save(k,s)}}catch(e){}};
+  edit('kern.tempo.v1',s=>s.acts=(s.acts||[]).filter(a=>!a.demo));
+  edit('kern.kracht.v1',s=>s.sessions=(s.sessions||[]).filter(a=>!a.demo));
+  edit('kern.geld.v1',s=>s.tx=(s.tx||[]).filter(a=>!a.demo));
+  for(const k of Object.keys(st.days))if(st.days[k].demo)delete st.days[k];st.demo=false;save();
+  render();refreshFeeds(true);toast('Alle demodata gewist')};
+$('#d-reset').onclick=()=>{if(confirm('Alle gegevens van alle onderdelen wissen? Dit kan niet ongedaan worden gemaakt.')){K.wipeAll();location.reload()}};
+
+/* ---------- feeds verversen: laad verouderde onderdelen onzichtbaar, zodat hun samenvatting klopt ---------- */
+function refreshFeeds(force){
+  ['tempo','kracht','eten','geld'].forEach((n,i)=>{if(!force&&fresh(K.feed.get(n)))return;
+    setTimeout(()=>{const f=document.createElement('iframe');f.src=n+'/';f.hidden=true;f.setAttribute('aria-hidden','true');document.body.appendChild(f);setTimeout(()=>f.remove(),9000)},[0,300,1600,700][i])})}
+addEventListener('storage',e=>{if(e.key&&e.key.startsWith('kern.feed.')){clearTimeout(refreshFeeds.t);refreshFeeds.t=setTimeout(()=>{renderHome();renderApps()},150)}});
+
+/* ---------- demodata ---------- */
+function demo(){const R=K.rng(5),o={};
+  const gauss=()=>(R()+R()+R()+R()-2)*1.22;
+  for(let i=75;i>=1;i--){const d=addDays(K.today0(),-i),hard=[0,2].includes(d.getDay());
+    const base=Math.log(57)+(75-i)/75*.11-(hard?.06:0);
+    o[dkey(d)]={hrv:Math.round(Math.exp(base+gauss()*.10)),rhr:Math.round(50.5-(75-i)/75*2.2+gauss()*1.4+(hard?1:0)),
+      sleep:Math.round((7.4+gauss()*.6)*4)/4,legs:Math.max(1,Math.min(5,Math.round(3.6+gauss()*.9-(hard?.8:0)))),mood:Math.max(1,Math.min(5,Math.round(3.8+gauss()*.8))),demo:1}}
+  return o}
+
+function render(){renderHome();renderRec();renderApps();renderSet()}
+K.info(INFO);
+K.tabs();
+if(!st.seeded&&!Object.keys(st.days).length){st.days=demo();st.demo=true;st.seeded=true;save()}
+render();
+refreshFeeds(false);
+</script>
+</body>
+</html>

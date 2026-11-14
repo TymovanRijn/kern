@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tempo">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<title>Tempo</title>
+<link rel="stylesheet" href="../core/core.css">
+</head>
+<body>
+
+<!-- ============ VANDAAG ============ -->
+<section class="view on" id="v-home">
+  <div class="top"><button class="fab" data-act="add" aria-label="Training toevoegen">+</button></div>
+  <h1>Vandaag</h1>
+  <div class="sub" id="home-sub"></div>
+
+  <div class="card">
+    <div class="hero">
+      <div><div class="big" id="tsb">0<small>vorm</small></div></div>
+      <div class="right" id="form-text"></div>
+    </div>
+    <svg class="chart" id="pmc" viewBox="0 0 320 120"></svg>
+    <div class="legend" style="margin-top:12px">
+      <span style="--d:var(--c-peak)">Fitness <b id="ctl">0</b></span>
+      <span style="--d:var(--c-mid)">Vermoeidheid <b id="atl">0</b></span>
+      <button class="info" data-info="pmc">Hoe werkt dit?</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Advies voor vandaag</h3><span class="chip" id="today-chip"></span></div>
+    <div class="advice" id="advice"></div>
+  </div>
+
+  <div class="label">Deze week</div>
+  <div class="hs" id="week-tiles"></div>
+
+  <div class="card" style="margin-top:var(--gap)">
+    <div class="card-h"><h3>Intensiteit · 28 dagen</h3><button class="info" data-info="polar">?</button></div>
+    <div class="seg-bar" id="zone-bar"></div>
+    <div class="legend" id="zone-legend"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Marathonprognose</h3><button class="info" data-info="riegel">?</button></div>
+    <div class="stats" id="pred"></div>
+    <div class="hint" id="pred-hint"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Belasting</h3><button class="info" data-info="ramp">?</button></div>
+    <div id="load-rows"></div>
+  </div>
+</section>
+
+<!-- ============ TRAININGEN ============ -->
+<section class="view" id="v-log">
+  <div class="top"><button class="fab" data-act="add">+</button></div>
+  <h1>Trainingen</h1>
+  <div class="sub" id="log-sub"></div>
+  <div class="search">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#98989f" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" placeholder="Zoeken">
+  </div>
+  <div class="segmented" id="log-filter">
+    <button class="on" data-f="all">Alles</button><button data-f="run">Lopen</button><button data-f="bike">Fietsen</button>
+  </div>
+  <div class="list" id="log-list"></div>
+</section>
+
+<!-- ============ SCHEMA ============ -->
+<section class="view" id="v-plan">
+  <div class="top"></div>
+  <h1>Schema</h1>
+  <div class="sub" id="plan-sub"></div>
+  <div class="card">
+    <div class="card-h"><h3 id="phase-title"></h3><button class="info" data-info="periodization">?</button></div>
+    <div class="phase-bar" id="phase-bar"></div>
+    <div class="hint" id="phase-hint"></div>
+  </div>
+  <div id="plan-weeks"></div>
+</section>
+
+<!-- ============ INSTELLINGEN ============ -->
+<section class="view" id="v-set">
+  <div class="top"></div>
+  <h1>Instellingen</h1>
+  <div class="sub">Profiel, koppelingen en data</div>
+
+  <div class="label">Fysiologie</div>
+  <div class="card" id="set-phys"></div>
+  <div class="label">Marathon</div>
+  <div class="card" id="set-race"></div>
+
+  <div class="label">Strava</div>
+  <div class="card">
+    <div id="strava-state" class="muted" style="font-size:16px"></div>
+    <div class="field"><label>Client ID</label><input id="s-cid" inputmode="numeric"></div>
+    <div class="field"><label>Client secret</label><input id="s-sec" type="password"></div>
+    <button class="btn strava" id="s-connect">Verbind met Strava</button>
+    <button class="btn" id="s-sync">Nu synchroniseren</button>
+    <div class="field" style="margin-top:8px"><label>Redirect-URL plakken</label><input id="s-paste" placeholder="…?code=…"></div>
+    <div class="hint">Apple Watch → Gezondheid → Strava → Tempo. Zet in de Strava-app ‘Gezondheid-sync’ aan, dan komt elke Watch-workout vanzelf hier. Lukt de terugsprong naar de app niet (iOS houdt PWA-opslag apart van Safari), kopieer dan de URL waarop je belandt en plak die hierboven.</div>
+  </div>
+
+  <div class="label">Data</div>
+  <div class="card">
+    <button class="btn" id="d-export">Exporteer JSON</button>
+    <button class="btn" id="d-import">Importeer JSON</button>
+    <button class="btn" id="d-demo">Wis demodata</button>
+    <button class="btn danger" id="d-reset">Alles wissen</button>
+    <input type="file" id="d-file" accept="application/json" hidden>
+  </div>
+
+  <div class="label">Wetenschap</div>
+  <div class="list" id="science-list"></div>
+  <div class="hint" style="text-align:center;margin-top:24px">Tempo · onderdeel van Kern · alles staat lokaal op je toestel</div>
+</section>
+
+<!-- tab bar -->
+<nav class="tabbar">
+  <button class="on" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Vandaag</button>
+  <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".8"/><circle cx="3.5" cy="12" r=".8"/><circle cx="3.5" cy="18" r=".8"/></svg>Trainingen</button>
+  <button data-tab="plan"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Schema</button>
+  <button data-tab="set"><svg viewBox="0 0 24 24"><path d="M6 4v6M6 14v6M12 4v2M12 10v10M18 4v10M18 18v2"/><path d="M4 12h4M10 8h4M16 16h4"/></svg>Instellingen</button>
+</nav>
+
+
+<script src="../core/core.js"></script>
+<script>
+/* =========================================================
+   Tempo — persoonlijke trainings-PWA
+   Modellen: Banister/Coggan PMC, Banister-TRIMP → hrTSS,
+   Seiler 3-zone, Riegel, periodisering met 3:1 + taper.
+   ========================================================= */
+const KEY='kern.tempo.v1';
+K.chrome('tempo');
+try{if(!localStorage.getItem(KEY)&&localStorage.getItem('tempo.v1'))localStorage.setItem(KEY,localStorage.getItem('tempo.v1'))}catch(e){}
+const DAY=864e5;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+// Standaardwaarden zijn algemene voorbeeldwaarden; je eigen waarden vul je in bij Instellingen (blijven op je toestel).
+const _d0=new Date();_d0.setHours(0,0,0,0);
+const _mon=new Date(_d0);_mon.setDate(_d0.getDate()-(_d0.getDay()+6)%7);
+const _race=new Date(_mon);_race.setDate(_mon.getDate()+20*7+6);
+const _k=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const DEFAULTS={
+  settings:{
+    hrMax:190, hrRest:55, lthrRun:170, lthrBike:165, ftp:200, sex:'m',
+    raceDate:_k(_race), raceName:'Marathon', goal:'3:45:00',
+    refDist:10, refTime:'48:00', planStart:_k(_mon),
+    runKmNow:25, peakKm:55, longNow:12, longMax:30, runsPerWeek:3, bikesPerWeek:2
+  },
+  acts:[], strava:{}, demo:false
+};
+let st=load();
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s)return{...DEFAULTS,...s,settings:{...DEFAULTS.settings,...s.settings}}}catch(e){}return structuredClone(DEFAULTS)}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+
+/* ---------- helpers ---------- */
+const dkey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
+const today0=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
+const parseT=s=>String(s).split(':').map(Number).reduce((a,b)=>a*60+b,0);
+const fmtT=sec=>{sec=Math.round(sec);const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`};
+const fmtPace=spk=>`${Math.floor(spk/60)}:${String(Math.round(spk%60)).padStart(2,'0')}`;
+const nl=x=>String(x).replace('.',',');
+const fmtDur=sec=>{const h=Math.floor(sec/3600),m=Math.round(sec%3600/60);return h?`${h}u${String(m).padStart(2,'0')}`:`${m} min`};
+const isRun=a=>/Run/.test(a.sport), isBike=a=>/Ride/.test(a.sport);
+const DOW=['zo','ma','di','wo','do','vr','za'];
+const relDay=d=>{const n=Math.round((today0()-new Date(dkey(d)+'T00:00'))/DAY);return n<=0?'vandaag':n===1?'gisteren':n<7?`${n} dgn`:new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})};
+
+/* ---------- belastingsmodel ---------- */
+// Banister-TRIMP: duur × ΔHR-ratio × 0.64·e^(1.92·ratio) (man) / 0.86·e^(1.67·ratio) (vrouw)
+function trimp(min,hr){const s=st.settings;const x=Math.max(0,Math.min(1,(hr-s.hrRest)/(s.hrMax-s.hrRest)));
+  return s.sex==='f'?min*x*0.86*Math.exp(1.67*x):min*x*0.64*Math.exp(1.92*x)}
+function load1(a){
+  const s=st.settings,min=a.time/60;
+  if(isBike(a)&&a.watts&&s.ftp){const IF=a.watts/s.ftp;return{tss:min/60*IF*IF*100,IF,src:'vermogen'}}
+  if(a.hr){const l=isBike(a)?s.lthrBike:s.lthrRun;const tss=trimp(min,a.hr)/trimp(60,l)*100;return{tss,IF:Math.sqrt(tss/(min/60)/100),src:'hartslag'}}
+  const IF=Math.min((a.rpe||5)/8.5,1.15);return{tss:min/60*IF*IF*100,IF,src:a.rpe?'RPE':'schatting'}
+}
+// Seiler 3-zone op sessieniveau (session-goal approach)
+function zone(a){
+  if(a.kind==='interval'||a.kind==='race')return 3;
+  if(a.kind==='tempo')return 2;
+  const {IF}=load1(a);
+  if(isBike(a)&&a.watts)return IF<.76?1:IF<.88?2:3;
+  if(a.hr){const l=isBike(a)?st.settings.lthrBike:st.settings.lthrRun;const r=a.hr/l;return r<.88?1:r<.95?2:3}
+  return (a.rpe||4)<=4?1:(a.rpe<=6?2:3);
+}
+// Performance Management Chart: CTL τ=42, ATL τ=7, TSB = CTL−ATL van gisteren
+function pmc(){
+  const byDay={};st.acts.forEach(a=>{const k=dkey(a.date);byDay[k]=(byDay[k]||0)+load1(a).tss});
+  // krachtsessies uit het onderdeel Kracht tellen mee als geschatte belasting
+  (K.feed.get('kracht')?.loads||[]).forEach(x=>{byDay[x.d]=(byDay[x.d]||0)+x.tss});
+  const end=today0();const first=st.acts.length?new Date(Math.min(...st.acts.map(a=>+new Date(a.date)))):end;
+  const start=new Date(dkey(first)+'T00:00');start.setDate(start.getDate()-1);
+  let ctl=0,atl=0;const out=[];
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const t=byDay[dkey(d)]||0;const tsb=ctl-atl;
+    ctl+=(t-ctl)/42;atl+=(t-atl)/7;out.push({d:new Date(d),tss:t,ctl,atl,tsb});
+  }
+  return out;
+}
+
+/* ---------- prognose (Riegel) ---------- */
+function predict(){
+  const s=st.settings,D=42.195;
+  const refs=[];
+  if(s.refDist&&s.refTime)refs.push({src:`${s.refDist} km in ${s.refTime}`,d:+s.refDist,t:parseT(s.refTime)});
+  const since=Date.now()-56*DAY;
+  st.acts.filter(a=>isRun(a)&&a.dist>=5000&&+new Date(a.date)>since&&a.kind==='race').forEach(a=>refs.push({src:a.name,d:a.dist/1000,t:a.time}));
+  if(!refs.length)return null;
+  const best=refs.map(r=>({...r,opt:r.t*Math.pow(D/r.d,1.06),con:r.t*Math.pow(D/r.d,1.10)})).sort((a,b)=>a.opt-b.opt)[0];
+  return best;
+}
+
+/* ---------- schema-generator ---------- */
+function plan(){
+  const s=st.settings;const start=new Date(s.planStart+'T00:00');const race=new Date(s.raceDate+'T00:00');
+  const nW=Math.max(4,Math.ceil((race-start)/DAY/7));const taper=nW>=12?3:2;const build=nW-taper;
+  const mp=parseT(s.goal)/42.195;
+  const weeks=[];
+  for(let i=0;i<nW;i++){
+    const ws=new Date(start);ws.setDate(start.getDate()+i*7);
+    let phase,vol,long;
+    if(i<build){
+      const p=build>1?i/(build-1):1;
+      phase=p<.4?'Basis':p<.8?'Opbouw':'Specifiek';
+      const deload=(i+1)%4===0;
+      vol=(s.runKmNow+(s.peakKm-s.runKmNow)*p)*(deload?.75:1);
+      long=Math.min(s.longMax,s.longNow+(s.longMax-s.longNow)*Math.min(1,p/.9))*(deload?.75:1);
+      phase=deload?phase+' · herstelweek':phase;
+    }else{
+      const j=i-build;const f=taper===3?[.75,.6,.35][j]:[.65,.35][j];
+      phase='Taper';vol=s.peakKm*f;long=j===taper-1?42.2:[22,16][j]||12;
+    }
+    long=Math.round(long*2)/2; // halve km
+    const r=days(phase,vol,long,mp,i===nW-1);
+    weeks.push({i,ws,phase,vol:Math.round(r.km),long,race:i===nW-1,days:r.D});
+  }
+  return{weeks,nW,build,taper,mp};
+}
+function days(phase,vol,long,mp,raceWeek){
+  const s=st.settings,P=x=>fmtPace(x);
+  const runs=Math.max(2,Math.min(5,s.runsPerWeek));
+  const rest=Math.max(0,vol-long);
+  const key=/Basis/.test(phase)?{t:'Heuvelsprints',d:`10×10 s bergop, volledig herstel + rustig. Kracht & loopeconomie.`}
+    :/Opbouw/.test(phase)?{t:'Intervallen',d:`5×1 km @ ${P(mp*.9)}/km, 2 min dribbel. VO₂max-prikkel.`}
+    :/Specifiek/.test(phase)?{t:'Marathontempo',d:`3×4 km @ ${P(mp)}/km (MP), 1 km rustig ertussen.`}
+    :{t:'Scherp houden',d:`4×1 km @ ${P(mp)}/km — volume omlaag, intensiteit blijft.`};
+  const keyKm=/Basis/.test(phase)?7:/Taper/.test(phase)?8:10; // incl. in- en uitlopen
+  key.t+=` · ${keyKm} km`;
+  const easyN=runs-2;
+  // rustige loopjes: rest van het volume, maar nooit langer dan ~half de lange duurloop (anders wordt het een 2e lange loop)
+  const easyKm=easyN>0?Math.max(6,Math.min(Math.round((rest-keyKm)/easyN),Math.round(long*.5),14)):0;
+  const longD=raceWeek?{t:st.settings.raceName,d:`Doel ${s.goal} · ${P(mp)}/km. Eerste 5 km bewust rustig.`}
+    :/Specifiek/.test(phase)?{t:`Lange duurloop ${nl(long)} km`,d:`Laatste ${Math.round(long/3)} km op MP (${P(mp)}/km).`}
+    :{t:`Lange duurloop ${nl(long)} km`,d:`Z1, praattempo (~${P(mp*1.15)}/km).`};
+  const bikeZ2={sport:'bike',t:'Fiets Z2',d:'60–90 min < 0,75 FTP. Aerobe basis zonder loopimpact.'};
+  const D=[
+    {sport:'rest',t:'Rust of krachttraining',d:'Zware basisoefeningen (squat, RDL, step-ups) — loopeconomie & blessurepreventie.'},
+    {sport:'run',t:key.t,d:key.d},
+    s.bikesPerWeek>0?bikeZ2:{sport:'rest',t:'Rust',d:''},
+    easyN>0?{sport:'run',t:`Rustige duurloop ${easyKm} km`,d:`Z1, ${P(mp*1.18)}/km of langzamer.`}:{sport:'rest',t:'Rust',d:''},
+    s.bikesPerWeek>1?{sport:'bike',t:'Fiets sweetspot',d:'2×20 min @ 0,88–0,93 FTP.'}:{sport:'rest',t:'Rust',d:''},
+    easyN>1?{sport:'run',t:`Herstelloop ${Math.max(5,easyKm-2)} km`,d:'Heel rustig, + 4 strides.'}:(s.bikesPerWeek>2?{sport:'bike',t:'Fiets lang Z2',d:'2–3 uur duur, < 0,75 FTP.'}:{sport:'rest',t:'Rust',d:''}),
+    {sport:'run',t:longD.t,d:longD.d},
+  ];
+  if(raceWeek){D[1]={sport:'run',t:'Activatie',d:`6 km rustig + 3×1 km @ ${P(mp)}/km`};D[4]={sport:'rest',t:'Rust',d:'Koolhydraten stapelen: ~8–10 g/kg/dag de laatste 36–48 uur.'};D[5]={sport:'run',t:'Shake-out 4 km',d:'+ 3 strides'};}
+  const km=raceWeek?6+4+5+42.2:long+keyKm+(easyN>0?easyKm:0)+(easyN>1?Math.max(5,easyKm-2):0)+(easyN>2?(easyN-2)*easyKm:0);
+  if(raceWeek)D[3]={sport:'run',t:'Rustige duurloop 6 km',d:'Z1, benen los.'};
+  return{D,km}; // D[0] = maandag
+}
+
+/* ---------- rendering ---------- */
+function ringSVG(pct,color,size=76){const r=size/2-3,c=2*Math.PI*r;
+  return `<svg viewBox="0 0 ${size} ${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="#2c2c2e" stroke-width="5" fill="none"/><circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="${color}" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="${c*Math.max(.04,Math.min(1,pct))} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg>`}
+const zColor=z=>['','var(--c-peak)','var(--c-mid)','var(--c-warn)'][z];
+
+function formState(tsb){
+  if(tsb>15)return{t:'Fris — misschien te fris; fitness zakt weg',c:'var(--c-good)'};
+  if(tsb>5)return{t:'Fris en klaar voor een harde sessie of wedstrijd',c:'var(--c-peak)'};
+  if(tsb>-10)return{t:'Neutraal — goede balans',c:'var(--c-good)'};
+  if(tsb>-30)return{t:'Productieve overbelasting — hier word je beter',c:'var(--c-mid)'};
+  return{t:'Hoog risico — herstel heeft voorrang',c:'var(--c-warn)'};
+}
+
+function renderHome(){
+  const s=st.settings,p=pmc(),now=p[p.length-1]||{ctl:0,atl:0,tsb:0};
+  const daysTo=Math.ceil((new Date(s.raceDate+'T00:00')-today0())/DAY);
+  $('#home-sub').textContent=`${s.raceName} · nog ${daysTo} dagen`;
+  const tsb=Math.round(now.tsb),fs=formState(tsb);
+  $('#tsb').innerHTML=`${tsb>0?'+':''}${tsb}<small>vorm</small>`;
+  $('#form-text').textContent=fs.t;
+  $('#ctl').textContent=Math.round(now.ctl);$('#atl').textContent=Math.round(now.atl);
+  // chart: last 90 days
+  const d=p.slice(-90),W=320,H=120,mx=Math.max(60,...d.map(x=>Math.max(x.ctl,x.atl)))*1.1;
+  const X=i=>i/(Math.max(1,d.length-1))*W,Y=v=>H-6-v/mx*(H-12);
+  const line=(k,c)=>`<path d="${d.map((x,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(x[k]).toFixed(1)).join('')}" stroke="${c}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+  const bars=d.map((x,i)=>x.tss?`<rect x="${X(i)-1}" y="${Y(x.tss/2)}" width="2" height="${H-6-Y(x.tss/2)}" fill="#3a3a3c" rx="1"/>`:'').join('');
+  $('#pmc').innerHTML=bars+line('atl','#f5a623')+line('ctl','#30c46a');
+
+  // advies
+  const pl=plan(),wi=Math.floor((today0()-new Date(s.planStart+'T00:00'))/DAY/7);
+  const dow=(today0().getDay()+6)%7;
+  let sess=wi>=0&&wi<pl.nW?pl.weeks[wi].days[dow]:null;
+  let adv='';
+  if(!sess)adv=wi<0?`Je schema start op ${new Date(s.planStart).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}. Tot die tijd: rustig onderhouden.`:'Geen geplande sessie.';
+  else{
+    adv=`<b>${sess.t}</b><br><span class="muted">${sess.d}</span>`;
+    if(tsb<-30&&sess.sport!=='rest')adv+=`<br><br>⚠︎ Je vorm is ${tsb}. Maak hier een rustige versie van of schuif ’m een dag op.`;
+    else if(tsb>10&&/Interval|tempo|Marathon/i.test(sess.t))adv+=`<br><br>Je bent fris — ideale dag om deze sessie goed neer te zetten.`;
+  }
+  const doneToday=st.acts.some(a=>dkey(a.date)===dkey(new Date()));
+  $('#today-chip').textContent=doneToday?'✓ gedaan':sess?(sess.sport==='run'?'Lopen':sess.sport==='bike'?'Fietsen':'Rust'):'';
+  $('#advice').innerHTML=adv;
+
+  // week tiles (ma..zo)
+  const mon=new Date(today0());mon.setDate(mon.getDate()-dow);
+  let tiles='';
+  for(let i=0;i<7;i++){const dd=new Date(mon);dd.setDate(mon.getDate()+i);const k=dkey(dd);
+    const acts=st.acts.filter(a=>dkey(a.date)===k);const t=acts.reduce((x,a)=>x+load1(a).tss,0);
+    const z=acts.length?Math.max(...acts.map(zone)):0;
+    const kr=(K.feed.get('kracht')?.loads||[]).some(x=>x.d===k);
+    const lbl=acts.length?(acts.some(isRun)&&acts.some(isBike)?'Run+Bike':acts.some(isRun)?'Lopen':'Fietsen'):(kr?'Kracht':i===dow?'Vandaag':(dd>today0()?'—':'Rust'));
+    tiles+=`<div class="tile ${i===dow?'today':''}"><div class="ring">${ringSVG(t/150,z?zColor(z):'#2c2c2e')}<div class="in" style="background:${acts.length?'#2b3a2e':'#1f1f21'}">${DOW[(i+1)%7].toUpperCase()}</div></div><div class="n">${lbl}</div><div class="t">${t?Math.round(t)+' TSS':dd.getDate()+' '+dd.toLocaleDateString('nl-NL',{month:'short'})}</div></div>`;}
+  $('#week-tiles').innerHTML=tiles;
+
+  // zones 28 d
+  const since=Date.now()-28*DAY,zt=[0,0,0,0];
+  st.acts.filter(a=>+new Date(a.date)>since).forEach(a=>zt[zone(a)]+=a.time);
+  const tot=zt[1]+zt[2]+zt[3]||1,pc=zt.map(x=>Math.round(x/tot*100));
+  $('#zone-bar').innerHTML=[1,2,3].map(z=>`<i style="flex:${zt[z]||0.001};background:${zColor(z)}"></i>`).join('');
+  $('#zone-legend').innerHTML=`<span style="--d:var(--c-peak)">${pc[1]}% laag</span><span style="--d:var(--c-mid)">${pc[2]}% drempel</span><span style="--d:var(--c-warn)">${pc[3]}% hoog</span><span class="muted" style="width:100%;font-size:14px">${pc[1]>=75?'Mooi gepolariseerd — doel ≈80% laag.':'Te veel in het midden/hoog: doel ≈80% laag, ≈20% hard.'}</span>`;
+
+  // prognose
+  const pr=predict(),gt=parseT(s.goal);
+  if(pr){
+    $('#pred').innerHTML=`<div class="stat"><div class="v">${fmtT(pr.opt).slice(0,4)}</div><div class="k">optimistisch</div></div><div class="stat"><div class="v">${fmtT(pr.con).slice(0,4)}</div><div class="k">behoudend</div></div><div class="stat"><div class="v">${s.goal.slice(0,4)}</div><div class="k">doel · ${fmtPace(gt/42.195)}/km</div></div>`;
+    $('#pred-hint').textContent=`Gebaseerd op ${pr.src}. Riegel voorspelt de snelheid die je hárt aankan; of je benen 42 km volhouden hangt vooral af van je duurvolume en lange duurlopen.`;
+  }else $('#pred').innerHTML='<div class="muted">Voeg een recente wedstrijdtijd toe in Instellingen.</div>';
+
+  // load rows
+  const wk=(o)=>st.acts.filter(a=>{const t=+new Date(a.date);return t>Date.now()-(o+7)*DAY&&t<=Date.now()-o*DAY});
+  const w0=wk(0),w1=wk(7);
+  const km=(arr,f)=>arr.filter(f).reduce((x,a)=>x+a.dist,0)/1000;
+  const ramp=p.length>7?now.ctl-p[p.length-8].ctl:0;
+  const acwr=now.ctl>0?now.atl/now.ctl:0;
+  $('#load-rows').innerHTML=`
+    <div class="row"><span>Hardlopen 7 dgn</span><b>${km(w0,isRun).toFixed(1)} km <span class="muted">(${km(w1,isRun).toFixed(0)})</span></b></div>
+    <div class="row"><span>Fietsen 7 dgn</span><b>${km(w0,isBike).toFixed(0)} km <span class="muted">(${km(w1,isBike).toFixed(0)})</span></b></div>
+    <div class="row"><span>Ramp rate</span><b style="color:${ramp>8?'var(--c-warn)':ramp>5?'var(--c-mid)':'var(--c-peak)'}">${ramp>0?'+':''}${ramp.toFixed(1)} CTL/wk</b></div>
+    <div class="row"><span>Acuut : chronisch</span><b style="color:${acwr>1.5?'var(--c-warn)':acwr>1.3?'var(--c-mid)':'var(--text)'}">${acwr.toFixed(2)}</b></div>`;
+}
+
+let logFilter='all';
+function renderLog(){
+  const q=$('#q').value.toLowerCase();
+  const arr=st.acts.filter(a=>(logFilter==='all'||(logFilter==='run'?isRun(a):isBike(a)))&&(!q||a.name.toLowerCase().includes(q))).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const wkRun=st.acts.filter(a=>isRun(a)&&+new Date(a.date)>Date.now()-7*DAY).length;
+  $('#log-sub').textContent=`${st.acts.length} trainingen · ${wkRun} loopjes deze week${st.demo?' · demo':''}`;
+  $('#log-list').innerHTML=arr.length?arr.slice(0,150).map(a=>{const L=load1(a),z=zone(a);
+    const desc=[relDay(a.date),a.dist?(a.dist/1000).toFixed(1)+' km':null,isRun(a)&&a.dist?fmtPace(a.time/(a.dist/1000))+'/km':fmtDur(a.time),a.hr?Math.round(a.hr)+' bpm':null,a.watts?Math.round(a.watts)+' W':null].filter(Boolean).join(' · ');
+    return `<div class="item" data-id="${a.id}"><div class="ring sm">${ringSVG(L.tss/150,zColor(z),58)}<div class="in" style="background:${isRun(a)?'#2b3a2e':'#1e3340'};color:${isRun(a)?'#bfe8b5':'#a9dcf2'}">${isRun(a)?'RN':isBike(a)?'FS':'—'}</div></div><div class="meta"><div class="nm">${esc(a.name)}</div><div class="ds">${desc}</div></div><div class="sc" style="color:${zColor(z)}">${Math.round(L.tss)}</div></div>`}).join('')
+    :'<div class="empty">Nog geen trainingen. Verbind Strava of tik op +.</div>';
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function renderPlan(){
+  const s=st.settings,pl=plan();
+  const wi=Math.floor((today0()-new Date(s.planStart+'T00:00'))/DAY/7);
+  $('#plan-sub').textContent=`${pl.nW} weken · ${s.runsPerWeek}× lopen · MP ${fmtPace(pl.mp)}/km`;
+  const cur=pl.weeks[Math.max(0,Math.min(pl.nW-1,wi))];
+  $('#phase-title').textContent=wi<0?'Schema start binnenkort':`Week ${wi+1} · ${cur.phase}`;
+  $('#phase-bar').innerHTML=pl.weeks.map(w=>`<i class="${w.i<wi?'done':w.i===wi?'now':''}"></i>`).join('');
+  $('#phase-hint').textContent=`Basis → Opbouw → Specifiek → Taper. Elke 4e week herstel (3:1). Piek ${s.peakKm} km/week, langste duurloop ${s.longMax} km.`;
+  const actDays={};st.acts.forEach(a=>{actDays[dkey(a.date)+(isRun(a)?'run':'bike')]=1});
+  $('#plan-weeks').innerHTML=pl.weeks.map(w=>{
+    const ds=w.days.map((d,j)=>{const dd=new Date(w.ws);dd.setDate(w.ws.getDate()+j);const done=actDays[dkey(dd)+d.sport];
+      return `<div class="day"><span class="d">${DOW[(j+1)%7]}</span><span class="s" style="${d.sport==='rest'?'color:var(--text-2)':''}">${d.sport==='bike'?'🚴 ':d.sport==='run'?'🏃 ':''}${d.t}${d.d?`<small>${d.d}</small>`:''}</span>${done?'<span class="ok">✓</span>':''}</div>`}).join('');
+    return `<div class="week ${w.i===wi?'cur':''}" id="wk${w.i}"><div class="week-h"><b>Week ${w.i+1}</b><span class="muted">${w.ws.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${w.phase}</span></div><div class="muted" style="margin:4px 0 10px;font-size:15px">${w.race?`Raceweek · ≈ ${w.vol} km incl. marathon`:`≈ ${w.vol} km lopen · lange loop ${nl(w.long)} km`}</div>${w.i>=wi-1&&w.i<=wi+1||wi<0&&w.i===0?ds:`<button class="btn" data-open="${w.i}" style="margin-top:0;padding:10px;font-size:15px">Toon dagen</button>`}</div>`}).join('');
+  $$('[data-open]').forEach(b=>b.onclick=()=>{const w=pl.weeks[b.dataset.open];b.outerHTML=w.days.map((d,j)=>`<div class="day"><span class="d">${DOW[(j+1)%7]}</span><span class="s">${d.t}${d.d?`<small>${d.d}</small>`:''}</span></div>`).join('')});
+}
+
+function fieldsHTML(defs){return defs.map(([k,l,t='number'])=>`<div class="field"><label>${l}</label><input data-k="${k}" type="${t}" value="${esc(st.settings[k])}"></div>`).join('')}
+function renderSet(){
+  $('#set-phys').innerHTML=fieldsHTML([['hrMax','Max hartslag'],['hrRest','Rusthartslag'],['lthrRun','Drempel-HR lopen'],['lthrBike','Drempel-HR fiets'],['ftp','FTP (W)']])+`<div class="field"><label>Geslacht (TRIMP)</label><select data-k="sex"><option value="m">man</option><option value="f">vrouw</option></select></div>`;
+  $('#set-race').innerHTML=fieldsHTML([['raceName','Wedstrijd','text'],['raceDate','Datum','date'],['goal','Doeltijd','text'],['refDist','Referentie (km)'],['refTime','Referentietijd','text'],['planStart','Start schema','date'],['runKmNow','Km/week nu'],['peakKm','Piek km/week'],['longNow','Lange loop nu (km)'],['longMax','Langste loop (km)'],['runsPerWeek','Loopjes/week'],['bikesPerWeek','Fietsritten/week']]);
+  $('[data-k=sex]').value=st.settings.sex;
+  $$('#v-set [data-k]').forEach(i=>i.onchange=()=>{st.settings[i.dataset.k]=i.type==='number'?+i.value:i.value;save();renderAll(false);toast('Opgeslagen')});
+  $('#s-cid').value=st.strava.clientId||'';$('#s-sec').value=st.strava.secret||'';
+  $('#strava-state').innerHTML=st.strava.access?`✓ Verbonden${st.strava.lastSync?' · laatst gesynct '+relDay(st.strava.lastSync*1000):''}`:'Niet verbonden';
+  $('#science-list').innerHTML=Object.entries(INFO).map(([k,v])=>`<div class="item" data-info="${k}"><div class="meta"><div class="nm">${v.t}</div><div class="ds">${v.s}</div></div><span class="muted">›</span></div>`).join('');
+  bindInfo();
+}
+
+/* ---------- wetenschap ---------- */
+const INFO={
+  pmc:{t:'Fitness, vermoeidheid & vorm',s:'Banister impulse-response model',b:`<p>Elke training is een <b>prikkel</b> (=stimulus) die twee effecten tegelijk geeft: fitness (traag opbouwend, traag afnemend) en vermoeidheid (snel op, snel weg). Je prestatie is het verschil.</p><p><b>Fitness (CTL)</b> = exponentieel gewogen gemiddelde van je dagelijkse belasting over ~42 dagen. <b>Vermoeidheid (ATL)</b> = idem over ~7 dagen. <b>Vorm (TSB)</b> = fitness − vermoeidheid van gisteren.</p><p>Belasting wordt uitgedrukt in TSS: 100 = één uur op je drempel. Fiets met vermogen: TSS = uur × IF² × 100 (IF = NP/FTP). Lopen met hartslag: Banister-TRIMP, genormaliseerd zodat 1 uur op drempel-HR = 100.</p><p>Krachtsessies die je in het onderdeel Kracht logt tellen mee als geschatte belasting (duur × RPE).</p><p><b>Kritisch:</b> het model is een vereenvoudiging. De tijdsconstanten (42/7) zijn conventies, geen individuele waarheden, en hartslag reageert ook op hitte, slaap en cafeïne.</p><p class="ref">Banister et al. (1975) Aust J Sports Med · Morton et al. (1990) J Appl Physiol · Coggan & Allen, Training and Racing with a Power Meter</p>`},
+  polar:{t:'Intensiteitsverdeling 80/20',s:'Seiler — gepolariseerde training',b:`<p>Elite-duursporters trainen opvallend consistent ~80% van hun sessies onder de eerste ventilatoire drempel (VT1, =punt waar je ademhaling merkbaar versnelt) en ~20% hard, met weinig in het ‘grijze midden’.</p><p>Deze app classificeert per sessie (session-goal approach): op vermogen (IF), drempel-hartslag, of RPE. Intervallen zijn zo herkenbaar, ook al ligt je gemiddelde HR lager.</p><p><b>Kritisch:</b> of strikt gepolariseerd beter is dan piramidaal (veel laag, wat midden, weinig hoog) is in recente meta-analyses níet eenduidig. Het robuuste deel: veel laag volume.</p><p class="ref">Seiler & Kjerland (2006) Scand J Med Sci Sports · Stöggl & Sperlich (2014) Front Physiol · Rosenblat et al. (2019) Sports Med</p>`},
+  riegel:{t:'Marathonprognose',s:'Riegel-vermoeidheidsexponent',b:`<p>T₂ = T₁ × (D₂/D₁)<sup>1,06</sup>. De exponent beschrijft hoeveel je vertraagt als de afstand toeneemt.</p><p>Voor recreatieve lopers met beperkt weekvolume onderschat Riegel de marathontijd structureel: de prognose is te snel. Daarom toont de app ook een <b>behoudende</b> variant met exponent 1,10.</p><p><b>Denk mee:</b> als je 5 km een marathon onder 3:10 ‘belooft’, maar je doel is 3:30 — wat is dan je echte beperking? Waarschijnlijk niet je VO₂max (=maximale zuurstofopname), maar je spier-uithoudingsvermogen en brandstofhuishouding na 30 km.</p><p class="ref">Riegel (1981) American Scientist · Vickers & Vertosick (2016) BMC Sports Sci Med Rehabil</p>`},
+  ramp:{t:'Belasting & blessurerisico',s:'Ramp rate en acuut:chronisch',b:`<p><b>Ramp rate</b> = hoeveel je fitness (CTL) per week stijgt. Vuistregel: +3 tot +6 duurzaam, >8 wordt riskant.</p><p><b>Acuut:chronisch-ratio</b> = ATL/CTL. Een plotse piek (>1,5) ging in observationele studies samen met meer blessures.</p><p><b>Kritisch:</b> de ACWR ligt methodologisch onder vuur (mathematische koppeling, ratio-artefacten). Gebruik ’m als signaal, niet als orakel. Hetzelfde geldt voor de ‘10%-regel’: populair, maar zwak onderbouwd.</p><p class="ref">Gabbett (2016) BJSM · Impellizzeri et al. (2020) Int J Sports Physiol Perform · Buist et al. (2008) Am J Sports Med</p>`},
+  periodization:{t:'Periodisering & taper',s:'Basis → opbouw → specifiek → taper',b:`<p><b>Periodisering</b> (=training opdelen in fasen met elk een eigen doel): eerst aerobe basis en kracht, dan VO₂max/drempel, dan wedstrijdspecifiek (marathontempo).</p><p>Elke 4e week een herstelweek (3:1) zodat <b>supercompensatie</b> (=lichaam herstelt boven het oude niveau) kan plaatsvinden.</p><p><b>Taper:</b> 2–3 weken, volume 40–60% omlaag, intensiteit behouden, frequentie grotendeels behouden. Levert gemiddeld ~2–3% prestatiewinst op.</p><p>Fietsen telt mee als <b>cross-training</b>: aerobe prikkel zonder de excentrische (=spier verlengt onder spanning) belasting van lopen.</p><p class="ref">Bosquet et al. (2007) Med Sci Sports Exerc · Mujika & Padilla (2003) Med Sci Sports Exerc · Issurin (2010) Sports Med</p>`},
+};
+function bindInfo(){$$('[data-info]').forEach(b=>b.onclick=()=>{const v=INFO[b.dataset.info];openSheet(`<h2>${v.t}</h2>${v.b}`)})}
+
+/* ---------- sheet / toast (gedeeld via Kern) ---------- */
+const {openSheet,closeSheet,toast}=K;
+
+function addSheet(){
+  openSheet(`<h2>Training toevoegen</h2>
+  <div class="segmented" id="a-sport"><button class="on" data-v="Run">Lopen</button><button data-v="Ride">Fietsen</button></div>
+  <div class="field"><label>Naam</label><input id="a-name" type="text" placeholder="Duurloop"></div>
+  <div class="field"><label>Datum</label><input id="a-date" type="date" value="${dkey(new Date())}"></div>
+  <div class="field"><label>Duur (u:mm:ss)</label><input id="a-time" type="text" placeholder="1:00:00"></div>
+  <div class="field"><label>Afstand (km)</label><input id="a-dist" type="number" step="0.1"></div>
+  <div class="field"><label>Gem. hartslag</label><input id="a-hr" type="number"></div>
+  <div class="field"><label>Gem./NP vermogen</label><input id="a-w" type="number"></div>
+  <div class="field"><label>RPE (1–10)</label><input id="a-rpe" type="number" min="1" max="10"></div>
+  <div class="field"><label>Type</label><select id="a-kind"><option value="">rustig</option><option value="tempo">tempo</option><option value="interval">interval</option><option value="race">wedstrijd</option></select></div>
+  <button class="btn pri" id="a-save">Opslaan</button>`);
+  let sport='Run';$$('#a-sport button').forEach(b=>b.onclick=()=>{$$('#a-sport button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sport=b.dataset.v});
+  $('#a-save').onclick=()=>{const t=parseT($('#a-time').value||'0');if(!t)return toast('Vul een duur in');
+    st.acts.push({id:'m'+Date.now(),name:$('#a-name').value||(sport==='Run'?'Loop':'Rit'),sport,date:new Date($('#a-date').value+'T12:00').toISOString(),time:t,dist:(+$('#a-dist').value||0)*1000,hr:+$('#a-hr').value||null,watts:+$('#a-w').value||null,rpe:+$('#a-rpe').value||null,kind:$('#a-kind').value||null,src:'manual'});
+    save();closeSheet();renderAll();toast('Toegevoegd')};
+}
+function detailSheet(id){const a=st.acts.find(x=>x.id==id);if(!a)return;const L=load1(a);
+  openSheet(`<h2>${esc(a.name)}</h2><div class="muted" style="margin-bottom:12px">${new Date(a.date).toLocaleString('nl-NL',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</div>
+  <div class="stats"><div class="stat"><div class="v">${Math.round(L.tss)}</div><div class="k">TSS · ${L.src}</div></div><div class="stat"><div class="v">${L.IF.toFixed(2)}</div><div class="k">intensiteit (IF)</div></div><div class="stat"><div class="v">Z${zone(a)}</div><div class="k">zone (3-zone)</div></div></div>
+  <div style="margin-top:14px">${[['Duur',fmtT(a.time)],['Afstand',a.dist?(a.dist/1000).toFixed(2)+' km':'—'],[isRun(a)?'Tempo':'Snelheid',a.dist?(isRun(a)?fmtPace(a.time/(a.dist/1000))+'/km':(a.dist/a.time*3.6).toFixed(1)+' km/u'):'—'],['Hartslag',a.hr?Math.round(a.hr)+' bpm':'—'],['Vermogen',a.watts?Math.round(a.watts)+' W':'—'],['Hoogtemeters',a.elev?Math.round(a.elev)+' m':'—'],['Bron',a.src||'—']].map(([k,v])=>`<div class="row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+  <div class="field"><label>Type</label><select id="d-kind"><option value="">automatisch</option><option value="tempo">tempo</option><option value="interval">interval</option><option value="race">wedstrijd</option></select></div>
+  <button class="btn danger" id="d-del">Verwijderen</button>`);
+  $('#d-kind').value=a.kind||'';$('#d-kind').onchange=e=>{a.kind=e.target.value||null;save();renderAll(false)};
+  $('#d-del').onclick=()=>{st.acts=st.acts.filter(x=>x.id!=id);save();closeSheet();renderAll()};
+}
+
+/* ---------- Strava ---------- */
+const redirect=()=>location.origin+location.pathname;
+$('#s-connect').onclick=()=>{st.strava.clientId=$('#s-cid').value.trim();st.strava.secret=$('#s-sec').value.trim();save();
+  if(!st.strava.clientId||!st.strava.secret)return toast('Vul client ID en secret in');
+  location.href=`https://www.strava.com/oauth/authorize?client_id=${st.strava.clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirect())}&approval_prompt=auto&scope=read,activity:read_all`};
+$('#s-paste').onchange=e=>{const m=e.target.value.match(/code=([^&]+)/);if(m)exchange(m[1]);else toast('Geen code gevonden')};
+$('#s-sync').onclick=()=>sync(true);
+async function tokenReq(body){const r=await fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:st.strava.clientId,client_secret:st.strava.secret,...body})});if(!r.ok)throw new Error('token '+r.status);const j=await r.json();Object.assign(st.strava,{access:j.access_token,refresh:j.refresh_token,expires:j.expires_at});save()}
+async function exchange(code){try{await tokenReq({code,grant_type:'authorization_code'});toast('Strava verbonden');history.replaceState(null,'',redirect());await sync(true)}catch(e){toast('Koppelen mislukt: '+e.message)}}
+async function sync(manual){
+  if(!st.strava.access){if(manual)toast('Eerst verbinden');return}
+  try{
+    if(Date.now()/1000>st.strava.expires-120)await tokenReq({grant_type:'refresh_token',refresh_token:st.strava.refresh});
+    if(st.demo){st.acts=st.acts.filter(a=>!a.demo);st.demo=false}
+    const after=st.strava.lastSync?st.strava.lastSync-3*86400:Math.floor(Date.now()/1000)-200*86400;
+    let page=1,n=0;
+    while(page<20){const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=100&page=${page}`,{headers:{Authorization:'Bearer '+st.strava.access}});
+      if(!r.ok)throw new Error('api '+r.status);const list=await r.json();
+      list.forEach(x=>{const a={id:'s'+x.id,name:x.name,sport:x.sport_type||x.type,date:x.start_date,time:x.moving_time,dist:x.distance,hr:x.average_heartrate||null,watts:x.device_watts?(x.weighted_average_watts||x.average_watts):null,elev:x.total_elevation_gain,kind:x.workout_type===1||x.workout_type===11?'race':x.workout_type===3||x.workout_type===12?'interval':null,src:'Strava'};
+        if(!/Run|Ride/.test(a.sport))return;const i=st.acts.findIndex(y=>y.id===a.id);if(i>=0)st.acts[i]={...a,kind:st.acts[i].kind??a.kind};else{st.acts.push(a);n++}});
+      if(list.length<100)break;page++}
+    st.strava.lastSync=Math.floor(Date.now()/1000);save();renderAll();if(manual||n)toast(`${n} nieuwe trainingen`);
+  }catch(e){if(manual)toast('Sync mislukt: '+e.message)}
+}
+
+/* ---------- data ---------- */
+$('#d-export').onclick=()=>{const b=new Blob([JSON.stringify({...st,strava:{...st.strava,secret:undefined,access:undefined,refresh:undefined}},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`tempo-${dkey(new Date())}.json`;a.click()};
+$('#d-import').onclick=()=>$('#d-file').click();
+$('#d-file').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());st={...st,...j,strava:st.strava};save();renderAll();toast('Geïmporteerd')}catch{toast('Ongeldig bestand')}};
+$('#d-demo').onclick=()=>{st.acts=st.acts.filter(a=>!a.demo);st.demo=false;save();renderAll();toast('Demodata gewist')};
+$('#d-reset').onclick=()=>{if(confirm('Alles wissen?')){localStorage.removeItem(KEY);st=structuredClone(DEFAULTS);save();renderAll()}};
+
+function demo(){
+  let seed=7;const R=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  const out=[];
+  for(let i=120;i>=1;i--){const d=new Date(today0());d.setDate(d.getDate()-i);const w=d.getDay();
+    const at=(h)=>{const x=new Date(d);x.setHours(h,R()*59|0);return x.toISOString()};
+    if(w===2&&R()>.15){const t=2400+R()*900;out.push({id:'d'+i+'r',demo:1,name:'Intervallen 5×1 km',sport:'Run',date:at(18),time:t,dist:t/245*1000,hr:168+R()*6,kind:'interval',src:'demo'})}
+    if(w===0&&R()>.1){const km=12+R()*6+(120-i)/30;const p=290+R()*20;out.push({id:'d'+i+'l',demo:1,name:'Lange duurloop',sport:'Run',date:at(9),time:km*p,dist:km*1000,hr:148+R()*6,src:'demo'})}
+    if((w===3||w===5)&&R()>.2){const t=3600+R()*1800;out.push({id:'d'+i+'b',demo:1,name:w===3?'MyWhoosh Z2':'Sweetspot 2×20',sport:'VirtualRide',date:at(19),time:t,dist:t*9.2,watts:st.settings.ftp*(w===3?.68+R()*.05:.86+R()*.04),hr:132+R()*10,src:'demo'})}
+    if(w===6&&R()>.25){const t=7200+R()*5400;out.push({id:'d'+i+'z',demo:1,name:'Duurrit',sport:'Ride',date:at(10),time:t,dist:t*8.6,watts:st.settings.ftp*(.68+R()*.06),hr:135+R()*8,elev:200+R()*400,src:'demo'})}
+  }
+  return out;
+}
+
+/* ---------- nav ---------- */
+$$('.tabbar button').forEach(b=>b.onclick=()=>{$$('.tabbar button').forEach(x=>x.classList.remove('on'));b.classList.add('on');$$('.view').forEach(v=>v.classList.remove('on'));$('#v-'+b.dataset.tab).classList.add('on');scrollTo(0,0);
+  if(b.dataset.tab==='plan'){const c=$('.week.cur');c&&c.scrollIntoView({block:'center'})}});
+$$('#log-filter button').forEach(b=>b.onclick=()=>{$$('#log-filter button').forEach(x=>x.classList.remove('on'));b.classList.add('on');logFilter=b.dataset.f;renderLog()});
+$('#q').oninput=renderLog;
+document.addEventListener('click',e=>{const it=e.target.closest('#log-list .item');if(it)detailSheet(it.dataset.id);if(e.target.closest('[data-act=add]'))addSheet()});
+
+function renderAll(withSet=true){renderHome();renderLog();renderPlan();if(withSet)renderSet();bindInfo();publish()}
+
+/* ---------- feed voor de andere onderdelen ---------- */
+function classify(x){if(x.sport==='rest')return'rest';
+  if(/Lange duurloop|lang Z2/.test(x.t))return'long';
+  if(/Interval|Marathontempo|sweetspot|Heuvel|Scherp|Activatie/i.test(x.t))return'hard';return'easy'}
+function publish(){
+  const s=st.settings,p=pmc(),now=p[p.length-1]||{ctl:0,atl:0,tsb:0},pl=plan(),start=new Date(s.planStart+'T00:00');
+  const days={};
+  for(let i=-1;i<=14;i++){const d=new Date(today0());d.setDate(d.getDate()+i);
+    const n=Math.round((d-start)/DAY),wi=Math.floor(n/7);if(n<0||wi>=pl.nW)continue;
+    const w=pl.weeks[wi],x=w.days[(d.getDay()+6)%7];
+    days[dkey(d)]={sport:x.sport,t:x.t,d:x.d,cls:(w.race&&d.getDay()===0)||dkey(d)===s.raceDate?'race':classify(x)}}
+  const wk=st.acts.filter(a=>+new Date(a.date)>Date.now()-7*DAY);
+  K.feed.set('tempo',{tsb:Math.round(now.tsb),ctl:Math.round(now.ctl),atl:Math.round(now.atl),form:formState(Math.round(now.tsb)).t,
+    race:{name:s.raceName,date:s.raceDate},days,doneToday:st.acts.some(a=>dkey(a.date)===dkey(new Date())),
+    week:{n:wk.length,runKm:Math.round(wk.filter(isRun).reduce((x,a)=>x+a.dist,0)/1000)},demo:!!st.demo});
+}
+
+/* ---------- boot ---------- */
+if(!st.acts.length&&!st.strava.access){st.acts=demo();st.demo=true;save()}
+renderAll();
+const code=new URLSearchParams(location.search).get('code');
+if(code)exchange(code);else sync(false);
+</script>
+</body>
+</html>

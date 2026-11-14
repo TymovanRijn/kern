@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kern">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="stylesheet" href="../core/core.css">
+<title>Kracht</title>
+<style>
+.setrow{display:flex;align-items:center;gap:10px;padding:7px 0}
+.setrow .sn{width:22px;color:var(--text-3);font-weight:700;font-size:15px;flex:none}
+.setrow input{flex:1;min-width:0;background:var(--card-2);border:0;border-radius:12px;padding:11px 10px;text-align:center;font-size:17px;font-weight:600;outline:0}
+.setrow .x{color:var(--text-3)}
+.setrow .u{color:var(--text-2);font-size:13px;width:34px;flex:none}
+.setrow .check{width:36px;height:36px}
+.restbar{position:fixed;left:50%;bottom:calc(var(--safe-b) + 92px);transform:translate(-50%,160px);transition:transform .3s cubic-bezier(.2,.8,.2,1);background:#fff;color:#000;border-radius:var(--r-pill);padding:12px 14px 12px 22px;display:flex;align-items:center;gap:16px;font-weight:700;font-size:17px;z-index:9;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.restbar.on{transform:translate(-50%,0)}
+.restbar button{border:0;background:#e5e5ea;color:#000;border-radius:var(--r-pill);padding:8px 14px;font-size:14px;font-weight:600}
+</style>
+</head>
+<body>
+
+<section class="view on" id="v-train">
+  <div class="top"><button class="fab" id="fab" aria-label="Training starten">+</button></div>
+  <h1>Kracht</h1>
+  <div class="sub" id="sub"></div>
+  <div id="advice"></div>
+  <div id="train-body"></div>
+</section>
+
+<section class="view" id="v-log">
+  <div class="top"></div>
+  <h1>Historie</h1>
+  <div class="sub" id="log-sub"></div>
+  <div class="list" id="log-list"></div>
+</section>
+
+<section class="view" id="v-prog">
+  <div class="top"></div>
+  <h1>Voortgang</h1>
+  <div class="sub">Geschatte maximale kracht per oefening</div>
+  <div class="search">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#98989f" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" placeholder="Zoeken">
+  </div>
+  <div class="list" id="prog-list"></div>
+  <div class="hint" style="text-align:center"><button class="info" data-info="e1rm">Hoe wordt dit berekend?</button></div>
+</section>
+
+<section class="view" id="v-set">
+  <div class="top"></div>
+  <h1>Instellingen</h1>
+  <div class="sub">Rusttijd, oefeningen en data</div>
+  <div class="label">Training</div>
+  <div class="card">
+    <div class="field"><label>Rusttijd (seconden)</label><input id="s-rest" type="number" inputmode="numeric"></div>
+  </div>
+  <div class="label">Eigen oefening</div>
+  <div class="card">
+    <div class="field"><label>Naam</label><input id="x-name" type="text" placeholder="Goblet squat"></div>
+    <div class="field"><label>Spiergroep</label><select id="x-group"></select></div>
+    <button class="btn" id="x-add">Oefening toevoegen</button>
+  </div>
+  <div class="label">Data</div>
+  <div class="card">
+    <button class="btn" id="d-backup">Back-up van alle onderdelen</button>
+    <button class="btn" id="d-demo">Wis demodata</button>
+    <button class="btn danger" id="d-reset">Alles van Kracht wissen</button>
+  </div>
+  <div class="label">Wetenschap</div>
+  <div class="list" id="science-list"></div>
+  <div class="hint" style="text-align:center;margin-top:24px">Kracht · onderdeel van Kern · alles staat lokaal op je toestel</div>
+</section>
+
+<nav class="tabbar">
+  <button class="on" data-tab="train"><svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>Training</button>
+  <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".8"/><circle cx="3.5" cy="12" r=".8"/><circle cx="3.5" cy="18" r=".8"/></svg>Historie</button>
+  <button data-tab="prog"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3.5-4 3 2.5L19 8"/></svg>Voortgang</button>
+  <button data-tab="set"><svg viewBox="0 0 24 24"><path d="M6 4v6M6 14v6M12 4v2M12 10v10M18 4v10M18 18v2"/><path d="M4 12h4M10 8h4M16 16h4"/></svg>Instellingen</button>
+</nav>
+
+<div class="restbar" id="restbar"><span>Rust <span class="num" id="rest-t">0:00</span></span><button id="rest-skip">Sla over</button></div>
+
+<script src="../core/core.js"></script>
+<script>
+/* =========================================================
+   Kracht — krachtlog. Onderdeel van Kern.
+   Leest het trainingsschema uit Tempo (feed) voor advies en
+   publiceert zijn sessies als belasting terug naar Tempo.
+   ========================================================= */
+K.chrome('kracht');
+const {$,$$,esc,dkey,DAY,nl,toast,openSheet,closeSheet,ringSVG,relDay}=K;
+const KEY='kern.kracht.v1';
+const GROUPS=['Benen','Heup & bil','Core','Borst','Rug','Schouders','Armen'];
+// bw = lichaamsgewicht (extra gewicht optioneel), sec = op tijd
+const EX=[
+  {id:'sq',n:'Squat',g:'Benen'},{id:'split',n:'Bulgarian split squat',g:'Benen'},{id:'stepup',n:'Step-up',g:'Benen'},
+  {id:'calf',n:'Kuitheffen',g:'Benen'},{id:'nordic',n:'Nordic curl',g:'Benen',bw:1},
+  {id:'rdl',n:'Romanian deadlift',g:'Heup & bil'},{id:'dl',n:'Deadlift',g:'Heup & bil'},{id:'hip',n:'Hip thrust',g:'Heup & bil'},
+  {id:'plank',n:'Plank',g:'Core',bw:1,sec:1},{id:'side',n:'Zijplank',g:'Core',bw:1,sec:1},{id:'bug',n:'Dead bug',g:'Core',bw:1},
+  {id:'bench',n:'Bankdrukken',g:'Borst'},{id:'push',n:'Push-up',g:'Borst',bw:1},
+  {id:'row',n:'Barbell row',g:'Rug'},{id:'pull',n:'Pull-up',g:'Rug',bw:1},
+  {id:'ohp',n:'Overhead press',g:'Schouders'},{id:'curl',n:'Biceps curl',g:'Armen'}
+];
+const ROUT=[
+  {id:'a',n:'Benen & heup',s:'Zwaar en kort, gericht op loopeconomie',items:[['sq',3,6],['rdl',3,8],['split',3,8],['calf',3,12],['plank',3,45]]},
+  {id:'b',n:'Bovenlichaam & core',s:'Houding en romp, benen blijven fris',items:[['bench',3,8],['row',3,8],['ohp',3,8],['pull',3,6],['bug',3,10],['side',2,30]]},
+  {id:'c',n:'Kort onderhoud',s:'20 minuten, voor drukke of zware weken',items:[['sq',2,5],['rdl',2,6],['calf',2,12],['plank',2,45]]}
+];
+const DEF={ex:EX,routines:ROUT,sessions:[],active:null,rest:90,demo:false,seeded:false};
+let st=K.load(KEY,DEF);
+const save=()=>{K.save(KEY,st);publish()};
+const exBy=id=>st.ex.find(e=>e.id===id)||{n:'Onbekend',g:''};
+const sorted=()=>[...st.sessions].sort((a,b)=>new Date(b.date)-new Date(a.date));
+const e1=(w,r)=>w>0?w*(1+r/30):0;                    // Epley
+const vol=s=>s.sets.reduce((x,t)=>x+(+t.w||0)*(+t.r||0),0);
+// Belasting voor Tempo: sessie-RPE × duur, omgerekend naar dezelfde schaal als TSS en met 0,7 gedempt
+const sessLoad=s=>{const IF=Math.min((s.rpe||6)/8.5,1.15);return (s.min||45)/60*IF*IF*100*.7};
+const fmtSet=(t,e)=>e.sec?`${t.r} s`:(+t.w?`${nl(t.w)} kg × ${t.r}`:`${t.r}×`);
+const rpeColor=r=>r<=6?'var(--c-peak)':r<=8?'var(--c-mid)':'var(--c-warn)';
+function lastSets(ex){for(const s of sorted()){const x=s.sets.filter(t=>t.ex===ex);if(x.length)return x}return[]}
+
+/* ---------- advies op basis van het Tempo-schema ---------- */
+function advice(){
+  const f=K.feed.get('tempo');if(!f||!f.days)return'';
+  const t=f.days[dkey(new Date())],m=f.days[dkey(K.addDays(new Date(),1))];
+  let txt='',c='var(--c-good)';
+  if(m&&(m.cls==='race'))        {txt=`Morgen: <b>${esc(m.t)}</b>. Vandaag geen krachttraining.`;c='var(--c-warn)'}
+  else if(m&&(m.cls==='long'||m.cls==='hard')){txt=`Morgen staat <b>${esc(m.t)}</b> gepland. Houd je benen licht: kies bovenlichaam of kort onderhoud.`;c='var(--c-mid)'}
+  else if(t&&(t.cls==='long'||t.cls==='hard')){txt=`Vandaag staat al <b>${esc(t.t)}</b> gepland. Kracht kan erna, zodat je rustdagen echt rust blijven.`;c='var(--c-mid)'}
+  else if(t&&t.cls==='rest')     {txt=/kracht/i.test(t.t)?'Vandaag staat krachttraining in je schema. Goede dag voor benen en heup.':'Rustdag in je schema. Een korte, zware sessie past hier goed.';c='var(--c-peak)'}
+  else if(t)                     {txt=`Vandaag: <b>${esc(t.t)}</b>. Kracht past erbij als je benen goed voelen.`}
+  if(f.tsb<-30){txt+=` Je vorm in Tempo is ${f.tsb}: herstel heeft voorrang.`;c='var(--c-warn)'}
+  return txt?`<div class="banner" style="--d:${c}"><span class="bar"></span><div>${txt}</div></div>`:''}
+
+/* ---------- training ---------- */
+function mkItem(ex,sets=3,reps=8){const prev=lastSets(ex);
+  return{ex,rows:Array.from({length:sets},(_,i)=>{const p=prev[i]||prev[prev.length-1];return{w:p?p.w:'',r:p?p.r:reps,done:false}})}}
+function start(r){st.active={start:Date.now(),name:r?r.n:'Vrije training',items:(r?r.items:[]).map(i=>mkItem(...i))};save();render();scrollTo(0,0)}
+
+function renderTrain(){
+  const now=Date.now(),wk=st.sessions.filter(s=>now-new Date(s.date)<7*DAY),pw=st.sessions.filter(s=>{const d=now-new Date(s.date);return d>=7*DAY&&d<14*DAY});
+  $('#sub').textContent=`${st.sessions.length} sessies · ${wk.length} deze week${st.demo?' · demo':''}`;
+  $('#advice').innerHTML=advice();
+  $('#fab').style.visibility=st.active?'hidden':'visible';
+  if(st.active){$('#train-body').innerHTML=activeHTML();bindActive();return}
+  const sets=wk.reduce((x,s)=>x+s.sets.length,0),last=sorted()[0];
+  const msg=wk.length>=2?'Twee sessies per week is genoeg om sterker te worden naast duurtraining':wk.length===1?'Eén sessie houdt je kracht vast; een tweede bouwt op':'Nog geen krachttraining deze week';
+  $('#train-body').innerHTML=`
+  <div class="card">
+    <div class="hero"><div><div class="big">${wk.length}<small>/week</small></div></div><div class="right">${msg}</div></div>
+    <div class="stats"><div class="stat"><div class="v">${sets}</div><div class="k">sets · 7 dgn</div></div><div class="stat"><div class="v">${nl(Math.round(wk.reduce((x,s)=>x+vol(s),0)/100)/10)} t</div><div class="k">volume (${nl(Math.round(pw.reduce((x,s)=>x+vol(s),0)/100)/10)})</div></div><div class="stat"><div class="v">${last?relDay(last.date).replace(' geleden',''):'—'}</div><div class="k">laatste sessie</div></div></div>
+    <div class="legend" style="margin-top:12px"><button class="info" data-info="runners" style="padding:0">Waarom kracht voor duursporters?</button></div>
+  </div>
+  <div class="label">Start een training</div>
+  <div class="list">${st.routines.map(r=>`<div class="item" data-start="${r.id}"><div class="ring sm">${ringSVG(1,'#2c2c2e',58)}<div class="in" style="background:#2b3a2e;color:#bfe8b5">${r.items.length}</div></div><div class="meta"><div class="nm">${esc(r.n)}</div><div class="ds">${esc(r.s||'')}</div></div><span class="go">›</span></div>`).join('')}
+    <div class="item" data-start=""><div class="ring sm">${ringSVG(1,'#2c2c2e',58)}<div class="in" style="background:#1f1f21">+</div></div><div class="meta"><div class="nm">Vrije training</div><div class="ds">Kies zelf je oefeningen</div></div><span class="go">›</span></div>
+  </div>`;
+  $$('[data-start]').forEach(b=>b.onclick=()=>start(st.routines.find(r=>r.id===b.dataset.start)));
+}
+
+function activeHTML(){const a=st.active;
+  return `<div class="card"><div class="card-h"><h3>${esc(a.name)}</h3><span class="chip num" id="clock"></span></div><div class="hint" style="margin-top:4px">Tik het rondje aan na elke set; de rusttimer start vanzelf.</div></div>`+
+  a.items.map((it,i)=>{const e=exBy(it.ex),prev=lastSets(it.ex);
+    return `<div class="card"><div class="card-h"><h3>${esc(e.n)}</h3><button class="info" data-rm="${i}">verwijder</button></div>
+    <div class="muted" style="font-size:14px;margin-bottom:8px">${prev.length?'Vorige keer: '+prev.map(p=>fmtSet(p,e)).join(' · '):'Eerste keer: begin licht en noteer wat je doet'}</div>
+    ${it.rows.map((r,j)=>`<div class="setrow"><span class="sn">${j+1}</span><input inputmode="decimal" data-i="${i}" data-j="${j}" data-k="w" value="${esc(r.w)}" placeholder="${e.bw?'+ kg':'kg'}" aria-label="Gewicht"><span class="x">×</span><input inputmode="numeric" data-i="${i}" data-j="${j}" data-k="r" value="${esc(r.r)}" aria-label="${e.sec?'Seconden':'Herhalingen'}"><span class="u">${e.sec?'sec':'reps'}</span><button class="check ${r.done?'on':''}" data-done="${i},${j}" aria-label="Set klaar">${r.done?'✓':''}</button></div>`).join('')}
+    <button class="btn" data-addset="${i}" style="padding:10px;font-size:15px">+ set</button></div>`}).join('')+
+  `<button class="btn" id="add-ex">+ oefening</button><button class="btn pri" id="finish">Training afronden</button><button class="btn danger" id="cancel">Annuleren</button>`}
+
+function bindActive(){const a=st.active;
+  $$('.setrow input').forEach(inp=>inp.oninput=()=>{a.items[inp.dataset.i].rows[inp.dataset.j][inp.dataset.k]=inp.value.replace(',','.');K.save(KEY,st)});
+  $$('[data-done]').forEach(b=>b.onclick=()=>{const[i,j]=b.dataset.done.split(',');const r=a.items[i].rows[j];r.done=!r.done;
+    b.classList.toggle('on',r.done);b.textContent=r.done?'✓':'';K.save(KEY,st);if(r.done)startRest();else stopRest()});
+  $$('[data-addset]').forEach(b=>b.onclick=()=>{const rows=a.items[b.dataset.addset].rows,l=rows[rows.length-1];rows.push({w:l?l.w:'',r:l?l.r:8,done:false});save();render()});
+  $$('[data-rm]').forEach(b=>b.onclick=()=>{a.items.splice(b.dataset.rm,1);save();render()});
+  $('#add-ex').onclick=()=>openSheet(`<h2>Oefening kiezen</h2>`+GROUPS.map(g=>{const xs=st.ex.filter(e=>e.g===g);return xs.length?`<h3>${g}</h3><div class="pills">${xs.map(e=>`<button class="pill" data-pick="${e.id}">${esc(e.n)}</button>`).join('')}</div>`:''}).join(''));
+  $('#cancel').onclick=()=>{if(confirm('Deze training weggooien?')){st.active=null;stopRest();save();render()}};
+  $('#finish').onclick=finishSheet;
+  tick();
+}
+document.addEventListener('click',e=>{const p=e.target.closest('[data-pick]');if(p&&st.active){st.active.items.push(mkItem(p.dataset.pick));save();closeSheet();render()}});
+
+function finishSheet(){const a=st.active;
+  const sets=a.items.flatMap(it=>it.rows.filter(r=>r.done&&+r.r>0).map(r=>({ex:it.ex,w:+r.w||0,r:+r.r})));
+  if(!sets.length)return toast('Vink eerst minstens één set af');
+  let rpe=7;const min=Math.max(1,Math.round((Date.now()-a.start)/6e4));
+  openSheet(`<h2>Hoe zwaar was het?</h2><p>RPE (=ervaren zwaarte van de hele sessie, 1 licht tot 10 maximaal). Hiermee schat Tempo je belasting.</p>
+    <div class="scale" id="rpe">${[1,2,3,4,5].map(n=>`<button data-v="${n}">${n}</button>`).join('')}</div>
+    <div class="scale" id="rpe2" style="margin-top:6px">${[6,7,8,9,10].map(n=>`<button data-v="${n}" class="${n===7?'on':''}">${n}</button>`).join('')}</div>
+    <div class="field" style="margin-top:14px"><label>Duur (minuten)</label><input id="f-min" type="number" inputmode="numeric" value="${min}"></div>
+    <div class="hint">${sets.length} sets · ${nl(Math.round(sets.reduce((x,t)=>x+t.w*t.r,0)))} kg totaal</div>
+    <button class="btn pri" id="f-save">Opslaan</button>`);
+  $$('#rpe button,#rpe2 button').forEach(b=>b.onclick=()=>{$$('#rpe button,#rpe2 button').forEach(x=>x.classList.toggle('on',x===b));rpe=+b.dataset.v});
+  $('#f-save').onclick=()=>{st.sessions.push({id:K.uid(),date:new Date().toISOString(),name:a.name,min:+$('#f-min').value||min,rpe,sets});
+    st.active=null;stopRest();save();closeSheet();render();toast('Training opgeslagen')};
+}
+
+/* ---------- klok en rusttimer ---------- */
+let restEnd=0,ac;
+const mmss=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+function startRest(){restEnd=Date.now()+st.rest*1000;try{ac=ac||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}$('#restbar').classList.add('on');tick()}
+function stopRest(){restEnd=0;$('#restbar').classList.remove('on')}
+function beep(){try{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=880;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(.25,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.5);o.start();o.stop(ac.currentTime+.5)}catch(e){}}
+function tick(){
+  const c=$('#clock');if(c&&st.active)c.textContent=mmss((Date.now()-st.active.start)/1000);
+  if(restEnd){const left=(restEnd-Date.now())/1000;if(left<=0){beep();stopRest();toast('Rust voorbij: volgende set')}else $('#rest-t').textContent=mmss(left)}
+}
+setInterval(tick,500);
+$('#rest-skip').onclick=stopRest;
+
+/* ---------- historie ---------- */
+function renderLog(){const arr=sorted();
+  $('#log-sub').textContent=arr.length?`${arr.length} sessies · ${nl(Math.round(arr.reduce((x,s)=>x+vol(s),0)/1000))} ton verplaatst`:'Nog geen sessies';
+  $('#log-list').innerHTML=arr.length?arr.slice(0,120).map(s=>`<div class="item" data-sess="${s.id}"><div class="ring sm">${ringSVG(s.rpe/10,rpeColor(s.rpe),58)}<div class="in" style="background:#1f1f21">${s.sets.length}</div></div><div class="meta"><div class="nm">${esc(s.name)}</div><div class="ds">${[relDay(s.date),s.min+' min',nl(Math.round(vol(s)))+' kg'].join(' · ')}</div></div><div class="sc" style="color:${rpeColor(s.rpe)}">${s.rpe}</div></div>`).join('')
+    :'<div class="empty">Nog geen sessies. Start een training op het eerste tabblad.</div>';
+  $$('[data-sess]').forEach(b=>b.onclick=()=>sessSheet(b.dataset.sess));
+}
+function sessSheet(id){const s=st.sessions.find(x=>x.id===id);if(!s)return;
+  const by={};s.sets.forEach(t=>(by[t.ex]=by[t.ex]||[]).push(t));
+  openSheet(`<h2>${esc(s.name)}</h2><div class="muted" style="margin-bottom:12px">${new Date(s.date).toLocaleString('nl-NL',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</div>
+    <div class="stats"><div class="stat"><div class="v">${s.min}</div><div class="k">minuten</div></div><div class="stat"><div class="v">${s.rpe}</div><div class="k">RPE</div></div><div class="stat"><div class="v">${Math.round(sessLoad(s))}</div><div class="k">belasting (TSS)</div></div></div>
+    <div style="margin-top:14px">${Object.entries(by).map(([ex,ts])=>`<div class="row"><span>${esc(exBy(ex).n)}</span><b style="text-align:right">${ts.map(t=>fmtSet(t,exBy(ex))).join('<br>')}</b></div>`).join('')}</div>
+    <button class="info" data-info="load" style="padding:12px 0">Hoe wordt de belasting geschat?</button>
+    <button class="btn danger" id="s-del">Verwijderen</button>`);
+  $('#s-del').onclick=()=>{st.sessions=st.sessions.filter(x=>x.id!==id);save();closeSheet();render()};
+}
+
+/* ---------- voortgang ---------- */
+function series(ex){const e=exBy(ex);
+  return [...st.sessions].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>{const ts=s.sets.filter(t=>t.ex===ex);if(!ts.length)return null;
+    const w=Math.max(...ts.map(t=>e1(t.w,t.r)));return{d:new Date(s.date),v:w>0?w:Math.max(...ts.map(t=>t.r)),kg:w>0}}).filter(Boolean)}
+function trend(p){if(p.length<2)return null;const last=p[p.length-1];
+  const ref=[...p].reverse().find(x=>last.d-x.d>=28*DAY)||p[0];return ref.v?(last.v-ref.v)/ref.v*100:null}
+function renderProg(){const q=$('#q').value.toLowerCase();
+  const rows=st.ex.map(e=>({e,p:series(e.id)})).filter(x=>x.p.length&&(!q||x.e.n.toLowerCase().includes(q)));
+  $('#prog-list').innerHTML=rows.length?rows.map(({e,p})=>{const l=p[p.length-1],t=trend(p);
+    const c=t==null?'var(--text-2)':t>1?'var(--c-peak)':t<-1?'var(--c-warn)':'var(--text-2)';
+    return `<div class="item plain" data-ex="${e.id}"><div class="meta"><div class="nm">${esc(e.n)}</div><div class="ds">${e.g} · ${p.length} sessies${t==null?'':` · ${t>0?'+':''}${nl(t,1)}% in 4 wkn`}</div></div><div class="sc" style="color:${c}">${l.kg?nl(Math.round(l.v))+'<small style="font-size:13px;color:var(--text-2)"> kg</small>':l.v+(e.sec?'<small style="font-size:13px;color:var(--text-2)"> s</small>':'×')}</div></div>`}).join('')
+    :'<div class="empty">Nog geen gegevens. Na je eerste training zie je hier je voortgang.</div>';
+  $$('[data-ex]').forEach(b=>b.onclick=()=>exSheet(b.dataset.ex));
+}
+function exSheet(id){const e=exBy(id),p=series(id),W=320,H=120;
+  const mn=Math.min(...p.map(x=>x.v)),mx=Math.max(...p.map(x=>x.v)),rg=(mx-mn)||1;
+  const X=i=>p.length>1?i/(p.length-1)*(W-12)+6:W/2,Y=v=>H-12-(v-mn)/rg*(H-24);
+  const best=sorted().flatMap(s=>s.sets.filter(t=>t.ex===id).map(t=>({...t,date:s.date}))).sort((a,b)=>(e1(b.w,b.r)||b.r)-(e1(a.w,a.r)||a.r)).slice(0,3);
+  openSheet(`<h2>${esc(e.n)}</h2><div class="muted">${e.g} · ${p[0].kg?'geschatte 1RM (=het gewicht dat je precies één keer kunt tillen)':'beste set per sessie'}</div>
+    <svg class="chart" viewBox="0 0 ${W} ${H}"><path d="${p.map((x,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(x.v).toFixed(1)).join('')}" stroke="#30c46a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>${p.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="2.6" fill="#30c46a"/>`).join('')}</svg>
+    <div class="stats"><div class="stat"><div class="v">${nl(Math.round(p[p.length-1].v))}</div><div class="k">nu</div></div><div class="stat"><div class="v">${nl(Math.round(mx))}</div><div class="k">beste</div></div><div class="stat"><div class="v">${p.length}</div><div class="k">sessies</div></div></div>
+    <h3>Beste sets</h3>${best.map(t=>`<div class="row"><span>${fmtSet(t,e)}</span><span class="muted">${relDay(t.date)}</span></div>`).join('')}`);
+}
+
+/* ---------- instellingen ---------- */
+const INFO={
+  runners:{t:'Kracht voor duursporters',s:'Loopeconomie en blessurepreventie',b:`<p>Zware krachttraining (weinig herhalingen, hoog gewicht) verbetert bij lopers en fietsers de <b>economie</b> (=hoeveel zuurstof je nodig hebt op een vaste snelheid), zonder dat je zwaarder wordt. Twee sessies per week gedurende minstens zes weken is in de meeste studies genoeg.</p><p>Plan de zware beensessie niet op de dag vóór een sleuteltraining: spierschade verslechtert tijdelijk je loopeconomie. Daarom kijkt deze app naar je schema in Tempo.</p><p><b>Kritisch:</b> de studies zijn klein en kort, en het effect op blessures is minder hard bewezen dan het effect op economie.</p><p class="ref">Blagrove et al. (2018) Sports Med · Balsalobre-Fernández et al. (2016) J Strength Cond Res · Rønnestad & Mujika (2014) Scand J Med Sci Sports · Lauersen et al. (2014) BJSM</p>`},
+  e1rm:{t:'Geschatte maximale kracht',s:'Epley-formule',b:`<p>1RM (=het gewicht dat je precies één keer kunt tillen) wordt geschat uit een gewone set: <b>1RM = gewicht × (1 + herhalingen / 30)</b>. Per sessie telt je beste set.</p><p>De trend vergelijkt je laatste sessie met die van minstens vier weken eerder. Oefeningen op lichaamsgewicht of tijd tonen het beste aantal herhalingen of seconden.</p><p><b>Kritisch:</b> de schatting is het nauwkeurigst onder de tien herhalingen en verschilt per oefening en per persoon. Gebruik de lijn, niet het losse getal.</p><p class="ref">Epley (1985) Boyd Epley Workout · LeSuer et al. (1997) J Strength Cond Res</p>`},
+  load:{t:'Belasting van een krachtsessie',s:'Sessie-RPE',b:`<p>Krachttraining heeft geen hartslag of vermogen dat de inspanning goed weergeeft. Daarom gebruikt de app <b>sessie-RPE</b>: duur × ervaren zwaarte. Dat wordt omgerekend naar dezelfde schaal als TSS in Tempo en met een factor 0,7 gedempt, omdat een uur kracht het hart en de bloedsomloop minder belast dan een uur duurtraining.</p><p>Tempo telt deze waarde mee in je vermoeidheid en vorm.</p><p><b>Kritisch:</b> de factor 0,7 is een keuze van deze app, geen gemeten waarde. Lokale spiervermoeidheid na zware benen kan groter zijn dan het getal doet vermoeden.</p><p class="ref">Foster et al. (2001) J Strength Cond Res · Haddad et al. (2017) Front Neurosci</p>`}
+};
+function renderSet(){
+  $('#s-rest').value=st.rest;
+  $('#x-group').innerHTML=GROUPS.map(g=>`<option>${g}</option>`).join('');
+  $('#science-list').innerHTML=Object.entries(INFO).map(([k,v])=>`<div class="item plain" data-info="${k}"><div class="meta"><div class="nm">${v.t}</div><div class="ds">${v.s}</div></div><span class="muted">›</span></div>`).join('');
+}
+$('#s-rest').onchange=e=>{st.rest=Math.max(10,+e.target.value||90);save();toast('Opgeslagen')};
+$('#x-add').onclick=()=>{const n=$('#x-name').value.trim();if(!n)return toast('Vul een naam in');st.ex.push({id:'x'+K.uid(),n,g:$('#x-group').value});$('#x-name').value='';save();toast('Oefening toegevoegd')};
+$('#d-backup').onclick=()=>K.exportAll();
+$('#d-demo').onclick=()=>{st.sessions=st.sessions.filter(s=>!s.demo);st.demo=false;save();render();toast('Demodata gewist')};
+$('#d-reset').onclick=()=>{if(confirm('Alle krachtgegevens wissen?')){st=structuredClone(DEF);st.seeded=true;save();render()}};
+
+/* ---------- feed ---------- */
+function publish(){const now=Date.now(),wk=st.sessions.filter(s=>now-new Date(s.date)<7*DAY),l=sorted()[0];
+  K.feed.set('kracht',{loads:st.sessions.filter(s=>now-new Date(s.date)<200*DAY).map(s=>({d:dkey(s.date),tss:Math.round(sessLoad(s))})),
+    week:{n:wk.length,sets:wk.reduce((x,s)=>x+s.sets.length,0)},n30:st.sessions.filter(s=>now-new Date(s.date)<30*DAY).length,
+    last:l?{date:l.date,name:l.name}:null,active:!!st.active,doneToday:st.sessions.some(s=>dkey(s.date)===dkey(new Date())),demo:!!st.demo})}
+
+/* ---------- demodata ---------- */
+function demo(){const R=K.rng(11),out=[],base={sq:60,rdl:60,split:16,calf:40,bench:50,row:45,ohp:30};
+  for(let i=70;i>=1;i--){const d=K.addDays(K.today0(),-i),w=d.getDay();if(w!==1&&w!==4||R()<.12)continue;
+    const r=ROUT[w===1?0:1],g=1+(70-i)/7*.012;d.setHours(18,R()*50|0);
+    out.push({id:'d'+i,demo:1,date:d.toISOString(),name:r.n,min:Math.round(42+R()*14),rpe:6+Math.round(R()*2),
+      sets:r.items.flatMap(([ex,n,reps])=>Array.from({length:n},(_,j)=>({ex,w:base[ex]?Math.round(base[ex]*g/2.5)*2.5:0,r:Math.max(1,reps-(j===n-1&&R()<.4?1:0))})))})}
+  return out}
+
+function render(){renderTrain();renderLog();renderProg();renderSet()}
+K.info(INFO);
+K.tabs();
+$('#q').oninput=renderProg;
+$('#fab').onclick=()=>start(null);
+if(!st.seeded&&!st.sessions.length){st.sessions=demo();st.demo=true;st.seeded=true}
+save();render();
+</script>
+</body>
+</html>
