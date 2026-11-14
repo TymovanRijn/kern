@@ -6,7 +6,7 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
 
 | Onderdeel | Map | Wat het doet |
 |---|---|---|
-| Vandaag | `/` | Ochtendcheck (HRV, rusthartslag, slaap), herstelanalyse en één dagadvies |
+| Vandaag | `/` | Ochtendcheck (HRV, rusthartslag, slaap), herstelanalyse en één dagadvies. Met een Polar H10 en een browser met Web Bluetooth (zoals Bluefy) meet de app zelf je rMSSD en rusthartslag |
 | Tempo | `tempo/` | Duurtraining: vorm, schema, prognose, optionele Strava-koppeling |
 | Kracht | `kracht/` | Krachtlog met routines, rusttimer en voortgang per oefening |
 | Eten | `eten/` | Plantaardig weekmenu afgestemd op de training, met boodschappenlijst |
@@ -26,6 +26,10 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
   - Kracht → Geld: sportkosten per krachtsessie
   - Alles → Vandaag: check, vorm en schema worden één advies
 - **Back-up.** Eén JSON-bestand met alle onderdelen, te maken en terug te zetten bij Instellingen. Inloggegevens van koppelingen gaan niet mee.
+
+## Bluetooth
+
+Safari en een PWA op het beginscherm van iOS ondersteunen geen Web Bluetooth. In Bluefy kan de ochtendcheck de Heart Rate Service van een borstband lezen (RR-intervallen) en daar rMSSD en rusthartslag uit berekenen. Bluefy bewaart gegevens apart van Safari; een gemeten waarde kan als korte code (`KERN-HRV;datum;hrv;rusthartslag`) worden overgezet.
 
 ## Een onderdeel toevoegen
 

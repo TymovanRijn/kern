@@ -193,10 +193,99 @@ function renderRec(){
   $$('[data-day]').forEach(b=>b.onclick=()=>checkSheet(b.dataset.day));
 }
 
+/* ---------- Polar H10 via Web Bluetooth (werkt in Bluefy, niet in Safari) ---------- */
+// De band stuurt de tijd tussen hartslagen (RR-intervallen) volgens de standaard Heart Rate Service.
+// HRV (rMSSD) en rusthartslag worden hier zelf uit berekend; er gaat niets naar een server.
+const SETTLE=20,SPAN=100;           // seconden: eerst stabiliseren, daarna meten
+let M=null;                         // lopende meting
+function parseHR(dv){const f=dv.getUint8(0);let i=1;const wide=f&1;
+  const hr=wide?dv.getUint16(i,true):dv.getUint8(i);i+=wide?2:1;if(f&8)i+=2;
+  const rr=[];if(f&16)while(i+1<dv.byteLength){rr.push(dv.getUint16(i,true)/1024*1000);i+=2}
+  return{hr,rr,contact:((f>>1)&3)!==2}}
+// rMSSD alleen over opeenvolgende, geldige slagen; een weggegooide slag onderbreekt het verschil.
+function rmssd(beats){let ss=0,n=0,sum=0,cnt=0,bad=0;
+  beats.forEach((b,i)=>{if(b.ok){sum+=b.rr;cnt++}else bad++;
+    if(i&&b.ok&&beats[i-1].ok){const d=b.rr-beats[i-1].rr;ss+=d*d;n++}});
+  return{rmssd:n?Math.sqrt(ss/n):0,n,cnt,bad,hr:cnt?60000/(sum/cnt):0,art:cnt+bad?bad/(cnt+bad):1}}
+function onHR(m,dv){if(M!==m)return;
+  const p=parseHR(dv);m.hr=p.hr;m.contact=p.contact;
+  if(!m.t0&&p.contact&&p.hr>0)m.t0=Date.now();
+  if(!m.t0)return;
+  const el=(Date.now()-m.t0)/1000;
+  for(const rr of p.rr){
+    const plausible=rr>=300&&rr<=2000;
+    let ok=plausible&&(m.last==null||Math.abs(rr-m.last)/m.last<=.2);
+    if(!ok){m.run++;if(m.run>=3&&plausible)ok=true}      // na drie afwijkers: opnieuw synchroniseren
+    if(ok){m.last=rr;m.run=0}
+    if(el>=SETTLE&&el<=SETTLE+SPAN+1)m.beats.push({rr,ok})}}
+function measStop(){const m=M;if(!m)return;m.done=true;clearInterval(m.timer);try{m.dev.gatt.connected&&m.dev.gatt.disconnect()}catch(e){}M=null}
+function measTick(){const m=M;if(!m)return;
+  if(!$('#m-root')||!$('#sheet').classList.contains('on'))return measStop();   // sheet weggeveegd: stoppen
+  const total=SETTLE+SPAN,el=m.t0?(Date.now()-m.t0)/1000:0,p=Math.min(1,el/total);
+  $('#m-hr').innerHTML=`${m.hr||'—'}<small>sl/min</small>`;
+  $('#m-bar').style.flex=Math.max(.001,p);$('#m-rest').style.flex=Math.max(.001,1-p);
+  $('#m-status').textContent=!m.t0?'Wachten op een hartslag. Zit de band strak en zijn de elektroden nat?'
+    :!m.contact?'Geen contact met je huid: maak de elektroden nat en span de band.'
+    :el<SETTLE?`Even stabiliseren… nog ${Math.ceil(SETTLE-el)} s`:`Meten… nog ${Math.max(0,Math.ceil(total-el))} s. Blijf stil liggen en adem rustig.`;
+  if(el>=total)measDone()}
+function measHTML(){return `<h2>Meting met Polar H10</h2><div id="m-root">
+  <div class="muted" id="m-status" style="margin:2px 0 14px;min-height:44px"></div>
+  <div class="card" style="background:var(--card-2);margin-bottom:0"><div class="hero"><div><div class="big" id="m-hr">—<small>sl/min</small></div></div><div class="right">Liggend, rustig ademen, niet praten</div></div>
+  <div class="seg-bar"><i id="m-bar" style="flex:.001;background:var(--c-peak)"></i><i id="m-rest" style="flex:1;background:var(--card)"></i></div></div>
+  <button class="btn danger" id="m-cancel">Stoppen</button></div>`}
+function noBtSheet(){openSheet(`<h2>Meten met de Polar H10</h2>
+  <p>Safari en de app op je beginscherm kunnen geen Bluetooth gebruiken. Een browser die dat wel kan is <b>Bluefy</b> (voor zover ik weet gratis in de App Store).</p>
+  <ol><li>Open Bluefy en ga naar <b>${esc(K.ROOT)}</b></li><li>Open de ochtendcheck en tik op <b>Meet met Polar H10</b></li><li>Kies je band in de lijst en blijf twee minuten liggen</li></ol>
+  <p><b>Let op:</b> Bluefy bewaart gegevens apart van Safari en de app op je beginscherm. Kies daarom een van twee manieren:</p>
+  <ul><li><b>Alles in Bluefy:</b> gebruik Kern daar. Dan is de meting meteen verbonden met Tempo, Kracht, Eten en Geld.</li><li><b>Meting overzetten:</b> meet in Bluefy, tik op <b>Kopieer code</b>, open Kern op je beginscherm en plak de code in de ochtendcheck.</li></ul>
+  <button class="btn" data-info="polar">Tips voor een goede meting</button>`)}
+function measFail(msg,k){openSheet(`<h2>Meting mislukt</h2><p>${esc(msg)}</p><button class="btn pri" id="m-retry">Opnieuw proberen</button><button class="btn" id="m-back">Terug naar de check</button>`);
+  $('#m-retry').onclick=()=>polarMeasure(k);$('#m-back').onclick=()=>checkSheet(k)}
+const codeFor=(k,hrv,rhr)=>`KERN-HRV;${k};${hrv};${rhr}`;
+function parseCode(t){const m=String(t).trim().match(/^KERN-HRV;(\d{4}-\d{2}-\d{2});(\d{1,3});(\d{2,3})$/);
+  if(!m||isNaN(pd(m[1])))return null;const hrv=+m[2],rhr=+m[3];return hrv>=5&&hrv<=300&&rhr>=25&&rhr<=130?{k:m[1],hrv,rhr}:null}
+function measDone(){const m=M;if(!m)return;const R=rmssd(m.beats),k=m.k;measStop();
+  const hrv=Math.round(R.rmssd),rhr=Math.round(R.hr);
+  if(R.cnt<50||R.n<40)return measFail(`Te weinig geldige hartslagen (${R.cnt}). Maak de elektroden nat, span de band en probeer opnieuw.`,k);
+  if(hrv<5||hrv>300||rhr<25||rhr>130)return measFail(`De uitkomst klopt waarschijnlijk niet (HRV ${hrv} ms, rusthartslag ${rhr}). Probeer opnieuw.`,k);
+  const q=R.art<.03?{t:'goed',c:'var(--c-peak)'}:R.art<.08?{t:'redelijk',c:'var(--c-mid)'}:{t:'slecht',c:'var(--c-warn)'};
+  const code=codeFor(k,hrv,rhr);
+  openSheet(`<h2>Meting klaar</h2><div class="stats"><div class="stat"><div class="v">${hrv}</div><div class="k">HRV (rMSSD, ms)</div></div><div class="stat"><div class="v">${rhr}</div><div class="k">rusthartslag</div></div><div class="stat"><div class="v">${R.cnt}</div><div class="k">slagen gebruikt</div></div></div>
+    <div class="row"><span>Signaalkwaliteit</span><b style="color:${q.c}">${q.t} · ${nl(R.art*100,1)}% weggegooid</b></div>
+    ${q.t==='slecht'?'<div class="hint" style="color:var(--c-warn)">Veel storing in het signaal. Meet bij voorkeur opnieuw met nattere elektroden en een strakkere band.</div>':''}
+    <button class="btn pri" id="m-use">Gebruik in ochtendcheck</button>
+    <button class="btn" id="m-copy">Kopieer code voor Kern op je beginscherm</button>
+    <div class="hint" id="m-code" style="word-break:break-all;user-select:all">${esc(code)}</div>
+    <button class="btn" id="m-again">Opnieuw meten</button>`);
+  $('#m-use').onclick=()=>{prefill={hrv,rhr};checkSheet(k)};
+  $('#m-copy').onclick=async()=>{try{await navigator.clipboard.writeText(code);toast('Code gekopieerd')}catch(e){toast('Houd de code hieronder ingedrukt en kopieer')}};
+  $('#m-again').onclick=()=>polarMeasure(k)}
+async function polarMeasure(k){
+  if(!navigator.bluetooth)return noBtSheet();
+  let dev;
+  try{dev=await navigator.bluetooth.requestDevice({filters:[{services:['heart_rate']}]})}
+  catch(e){return toast(e.name==='NotFoundError'?'Geen band gekozen':'Bluetooth: '+e.message)}
+  measStop();
+  openSheet(measHTML());
+  const m=M={k,dev,beats:[],t0:0,hr:0,contact:true,last:null,run:0,done:false};
+  $('#m-status').textContent=`Verbinden met ${dev.name||'band'}…`;
+  $('#m-cancel').onclick=()=>{measStop();checkSheet(k)};
+  dev.addEventListener('gattserverdisconnected',()=>{if(M===m&&!m.done){measStop();measFail('De verbinding met de band viel weg. Controleer of de band nat is op je huid en dat geen andere app de band gebruikt.',k)}});
+  try{
+    const srv=await dev.gatt.connect(),svc=await srv.getPrimaryService('heart_rate'),ch=await svc.getCharacteristic('heart_rate_measurement');
+    ch.addEventListener('characteristicvaluechanged',e=>onHR(m,e.target.value));
+    await ch.startNotifications();
+    if(M===m)m.timer=setInterval(measTick,500);
+  }catch(e){if(M===m){measStop();measFail('Verbinden mislukt: '+e.message,k)}}
+}
+
 /* ---------- ochtendcheck ---------- */
-function checkSheet(k=today()){const c=st.days[k]||{};let legs=c.legs||0,mood=c.mood||0;
+let prefill=null;
+function checkSheet(k=today()){const c={...(st.days[k]||{}),...prefill};prefill=null;let legs=c.legs||0,mood=c.mood||0;
   const sc=(id,v)=>`<div class="scale" id="${id}">${[1,2,3,4,5].map(n=>`<button data-v="${n}" class="${v===n?'on':''}">${n}</button>`).join('')}</div>`;
   openSheet(`<h2>Ochtendcheck</h2><div class="muted" style="margin-bottom:8px">${k===today()?'Vandaag':pd(k).toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'})} · meet liggend, direct na het wakker worden</div>
+    <button class="btn" id="c-polar" style="margin-top:6px">Meet met Polar H10</button>
+    <div class="field"><label>Meting plakken</label><input id="c-paste" type="text" placeholder="code uit Bluefy" autocomplete="off"></div>
     <div class="field"><label>HRV (rMSSD, ms)</label><input id="c-hrv" type="number" inputmode="numeric" value="${c.hrv||''}" placeholder="62"></div>
     <div class="field"><label>Rusthartslag</label><input id="c-rhr" type="number" inputmode="numeric" value="${c.rhr||''}" placeholder="48"></div>
     <div class="field"><label>Slaap (uren)</label><input id="c-sleep" type="text" inputmode="decimal" value="${c.sleep?nl(c.sleep):''}" placeholder="7,5"></div>
@@ -204,6 +293,8 @@ function checkSheet(k=today()){const c=st.days[k]||{};let legs=c.legs||0,mood=c.
     <div class="field col"><label>Zin om te trainen <span class="muted">(1 geen · 5 veel)</span></label>${sc('c-mood',mood)}</div>
     <button class="btn pri" id="c-save">Opslaan</button>${st.days[k]?'<button class="btn danger" id="c-del">Verwijderen</button>':''}
     <div class="hint" style="text-align:center"><button class="info" data-info="measure">Hoe meet ik nauwkeurig?</button></div>`);
+  $('#c-polar').onclick=()=>polarMeasure(k);
+  $('#c-paste').oninput=e=>{const m=parseCode(e.target.value);if(m){prefill={hrv:m.hrv,rhr:m.rhr};checkSheet(m.k);toast('Meting overgenomen')}};
   const bind=(id,set)=>$$('#'+id+' button').forEach(b=>b.onclick=()=>{$$('#'+id+' button').forEach(x=>x.classList.toggle('on',x===b));set(+b.dataset.v)});
   bind('c-legs',v=>legs=v);bind('c-mood',v=>mood=v);
   $('#c-save').onclick=()=>{const hrv=Math.round(+$('#c-hrv').value),rhr=Math.round(+$('#c-rhr').value),sleep=+String($('#c-sleep').value).replace(',','.');
@@ -228,6 +319,7 @@ function renderApps(){$('#apps').innerHTML=APPS.map(a=>`<a class="app-tile" href
 /* ---------- instellingen ---------- */
 const INFO={
   measure:{t:'Zo meet je nauwkeurig',s:'Elke ochtend op dezelfde manier',b:`<p>HRV (=hartslagvariabiliteit: de kleine verschillen in tijd tussen opeenvolgende hartslagen) zegt alleen iets als je elke dag <b>op dezelfde manier</b> meet:</p><ul><li>direct na het wakker worden, na een toiletbezoek, vóór koffie</li><li>liggend of zittend, maar altijd hetzelfde</li><li>één tot twee minuten, rustig ademend</li></ul><p>Een borstband die de hartslag elektrisch meet (zoals een Polar H10) met een HRV-app is hiervoor het nauwkeurigst. Neem uit die app de <b>rMSSD</b> in milliseconden en je rusthartslag over. Een horloge dat ’s nachts meet kan ook, zolang je steeds dezelfde bron gebruikt.</p><p><b>Kritisch:</b> meng geen bronnen: de nachtwaarde van een horloge en een ochtendmeting met borstband zijn niet met elkaar te vergelijken. Sommige horloges geven SDNN in plaats van rMSSD; dat is een andere maat.</p><p class="ref">Plews et al. (2013) Sports Med · Esco & Flatt (2014) J Sports Sci Med · Task Force ESC/NASPE (1996) Circulation</p>`},
+  polar:{t:'Meten met een Polar H10',s:'Zo krijg je een betrouwbare meting',b:`<p>De band meet je hartslag elektrisch via twee elektroden en stuurt de tijd tussen opeenvolgende slagen (RR-intervallen, in milliseconden) door. Daaruit berekent de app je <b>rMSSD</b>: de wortel van het gemiddelde van de gekwadrateerde verschillen tussen opeenvolgende slagen.</p><ul><li><b>Elektroden nat maken</b> met water of elektrodengel; droge elektroden geven veel storing.</li><li>Band <b>strak onder je borstbeen</b>, het logo rechtop.</li><li>Direct na het wakker worden, <b>liggend</b>, rustig ademen, niet praten of bewegen.</li><li>Sluit andere apps die de band gebruiken (zoals een trainings- of Strava-app); die kunnen de verbinding verstoren.</li><li>De meting duurt twee minuten: de eerste 20 seconden zijn om te stabiliseren, de volgende 100 seconden tellen mee.</li></ul><p>Slagen die onmogelijk zijn (sneller dan 200 of trager dan 30 slagen per minuut) of meer dan 20% afwijken van de vorige slag worden weggegooid en niet meegenomen. Boven ongeveer 8% weggegooide slagen noemt de app de meting slecht.</p><p><b>Kritisch:</b> twee minuten ligt onder de vijf minuten van de klassieke standaard; voor rMSSD in rust is een korte meting redelijk betrouwbaar, maar je dagelijkse waarde schommelt dan wat meer. Gebruik altijd dezelfde methode en meet niet af en toe met een ander apparaat. De spelregels van dit filter zijn eigen keuzes van de app, geen gepubliceerde norm. Ik heb dit niet tegen een referentie-ecg gecontroleerd.</p><p class="ref">Esco & Flatt (2014) J Sports Sci Med · Gilgen-Ammann et al. (2019) Eur J Appl Physiol · Plews et al. (2017) Int J Sports Physiol Perform · Shaffer & Ginsberg (2017) Front Public Health</p>`},
   hrv:{t:'HRV: basislijn en bandbreedte',s:'Waarom één meting weinig zegt',b:`<p>HRV schommelt van dag tot dag sterk. Daarom kijkt de app niet naar de losse meting, maar naar je <b>basislijn</b>: het gemiddelde van de afgelopen zeven dagen.</p><p>Die basislijn wordt vergeleken met je <b>normale bandbreedte</b>: het gemiddelde van de afgelopen 60 dagen plus en min één standaarddeviatie (=maat voor de gebruikelijke spreiding). Alle berekeningen gebeuren op de natuurlijke logaritme van rMSSD, omdat HRV scheef verdeeld is.</p><ul><li>basislijn binnen de band: stabiel</li><li>eronder: je lichaam verwerkt meer dan het aankan (training, slaaptekort, stress, beginnende ziekte)</li><li>sterke schommeling van dag tot dag (meer dan ongeveer 12%): vaak een vroeg teken van te veel belasting</li></ul><p><b>Kritisch:</b> de grenzen (één standaarddeviatie, 12%) zijn gangbare keuzes, geen natuurwetten. Een hoge HRV is niet altijd goed: bij zware vermoeidheid kan hij juist oplopen. Kijk altijd samen met hoe je je voelt.</p><p class="ref">Plews et al. (2012) Eur J Appl Physiol · Plews et al. (2013) Sports Med · Buchheit (2014) Front Physiol · Bellenger et al. (2016) Sports Med</p>`},
   rhr:{t:'Rusthartslag',s:'Traag signaal, makkelijk te meten',b:`<p>Je rusthartslag daalt als je uithoudingsvermogen verbetert, doordat je hart per slag meer bloed rondpompt. Dat gaat over weken tot maanden.</p><p>Op korte termijn is een rusthartslag die vijf of meer slagen boven je gemiddelde ligt een waarschuwing: vaak vermoeidheid, uitdroging, alcohol of een infectie die eraan komt.</p><p><b>Kritisch:</b> rusthartslag is minder gevoelig dan HRV en reageert ook op warmte, cafeïne en houding. Vergelijk alleen metingen die op dezelfde manier zijn gedaan.</p><p class="ref">Buchheit (2014) Front Physiol · Reimers et al. (2018) J Clin Med</p>`},
   trend:{t:'Ga ik vooruit?',s:'Vier weken tegenover de vier weken ervoor',b:`<p>De app vergelijkt het gemiddelde van de afgelopen 28 dagen met de 28 dagen daarvoor. Een <b>stijgende HRV samen met een dalende of gelijke rusthartslag</b> past bij een beter uithoudingsvermogen en goed herstel.</p><p>Daalt je HRV over weken met meer dan ongeveer 5%, dan vraagt je lichaam meer herstel dan het krijgt.</p><p><b>Kritisch:</b> dit zijn groepsbevindingen. Bij goed getrainde sporters kan HRV in een zware opbouwfase tijdelijk dalen en vlak voor een wedstrijd juist weer stijgen, zonder dat er iets mis is. Gebruik de trend als aanleiding om na te denken, niet als oordeel.</p><p class="ref">Plews et al. (2013) Sports Med · Bellenger et al. (2016) Sports Med · Vesterinen et al. (2016) Scand J Med Sci Sports</p>`},
