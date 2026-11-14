@@ -9,7 +9,7 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
 | Vandaag | `/` | Ochtendcheck (HRV, rusthartslag, slaap), herstelanalyse en één dagadvies. Met een Polar H10 en een browser met Web Bluetooth (zoals Bluefy) meet de app zelf je rMSSD en rusthartslag |
 | Tempo | `tempo/` | Duurtraining: vorm, schema, prognose, optionele Strava-koppeling |
 | Kracht | `kracht/` | Krachtlog met routines, rusttimer en voortgang per oefening |
-| Eten | `eten/` | Plantaardig weekmenu afgestemd op de training, met boodschappenlijst |
+| Eten | `eten/` | Plantaardig weekmenu (55 recepten met bereiding, alleen gasfornuis en airfryer) afgestemd op de training; kiest de goedkoopste week en rekent de boodschappen uit per verpakking |
 | Geld | `geld/` | Uitgaven uit een bank-CSV, categorieën en vaste lasten |
 | Amifo | `amifo/` | Vriendenboek |
 
@@ -30,6 +30,10 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
 ## Bluetooth
 
 Safari en een PWA op het beginscherm van iOS ondersteunen geen Web Bluetooth. In Bluefy kan de ochtendcheck de Heart Rate Service van een borstband lezen (RR-intervallen) en daar rMSSD en rusthartslag uit berekenen. Bluefy bewaart gegevens apart van Safari; een gemeten waarde kan als korte code (`KERN-HRV;datum;hrv;rusthartslag`) worden overgezet.
+
+## Schermen
+
+Alle onderdelen delen dezelfde onderschermen (`K.openSheet`). Een open scherm beweegt mee met je vinger en sluit als je naar beneden veegt; de pagina erachter scrolt niet mee. Amifo heeft een eigen versie met hetzelfde gedrag.
 
 ## Een onderdeel toevoegen
 

@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="../icons/icon-180.png">
 <link rel="stylesheet" href="../core/core.css">
 <title>Eten</title>
+<style>#rec-list .nm,#shop-body .nm,.list .item .nm{white-space:normal}#rec-list .ds{white-space:normal}</style>
 </head>
 <body>
 
@@ -26,9 +27,10 @@
 <section class="view" id="v-week">
   <div class="top"></div>
   <h1>Week</h1>
-  <div class="sub">Menu afgestemd op je trainingsschema</div>
+  <div class="sub" id="week-sub"></div>
   <div id="week-body"></div>
-  <button class="btn" id="replan">Week opnieuw plannen</button>
+  <button class="btn" id="replan">Goedkoopste week opnieuw plannen</button>
+  <div class="hint" style="text-align:center"><button class="info" data-info="budget">Hoe wordt dit gepland?</button></div>
 </section>
 
 <section class="view" id="v-shop">
@@ -36,7 +38,7 @@
   <h1>Boodschappen</h1>
   <div class="sub" id="shop-sub"></div>
   <div id="shop-hero"></div>
-  <div class="segmented" id="shop-mode"><button class="on" data-v="list">Lijst</button><button data-v="pantry">Voorraad</button></div>
+  <div class="segmented" id="shop-mode"><button class="on" data-v="list">Lijst</button><button data-v="pantry">In huis</button></div>
   <div id="shop-body"></div>
 </section>
 
@@ -49,13 +51,14 @@
     <input id="q" placeholder="Zoeken">
   </div>
   <div class="segmented" id="rec-filter"><button class="on" data-v="">Alles</button><button data-v="o">Ontbijt</button><button data-v="l">Lunch</button><button data-v="d">Diner</button><button data-v="s">Snack</button></div>
+  <div class="segmented" id="rec-sort"><button class="on" data-v="std">Standaard</button><button data-v="cheap">Goedkoop</button><button data-v="prot">Eiwit</button></div>
   <div class="list" id="rec-list"></div>
 </section>
 
 <nav class="tabbar">
-  <button class="on" data-tab="home"><svg viewBox="0 0 24 24"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 1.5-3 4-3 7h3M17 3v18"/></svg>Vandaag</button>
+  <button class="on" data-tab="home"><svg viewBox="0 0 24 24"><path d="M7 3v8M4.500 3v5a2.500 2.500 0 0 0 5 0V3M7 11v10M17 3c-2 1.500-3 4-3 7h3M17 3v18"/></svg>Vandaag</button>
   <button data-tab="week"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Week</button>
-  <button data-tab="shop"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.200a2 2 0 0 1-2-1.800L5 8Z"/><path d="M9 8V6.500a3 3 0 0 1 6 0V8"/></svg>Boodschappen</button>
+  <button data-tab="shop"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1.200 11a2 2 0 0 1-2 1.800H8.200a2 2 0 0 1-2-1.800L5 8Z"/><path d="M9 8V6.500a3 3 0 0 1 6 0V8"/></svg>Boodschappen</button>
   <button data-tab="rec"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Z"/><path d="M9 9h6M9 13h4"/></svg>Recepten</button>
 </nav>
 
@@ -64,24 +67,40 @@
 <script>
 /* =========================================================
    Eten — plantaardige maaltijdplanner met boodschappenlijst.
-   Onderdeel van Kern. Leest per dag het soort training uit de
-   Tempo-feed en stemt koolhydraten en porties daarop af.
+   Onderdeel van Kern. Alles te koken met een gasfornuis en een airfryer.
+   Leest per dag het soort training uit de Tempo-feed en stemt koolhydraten
+   en porties daarop af. Kiest de goedkoopste week die daarbij past.
    ========================================================= */
 K.chrome('eten');
 const {$,$$,esc,dkey,DAY,nl,eur,toast,openSheet,closeSheet,ringSVG,addDays,pd}=K;
 const KEY='kern.eten.v1';
-const DEF={plan:{},salt:0,bought:{},pantry:{'olijfolie':1},supp:{}};
+const DEF={v:2,plan:{},salt:0,bought:{},pantry:{'olijfolie':1},prices:{},supp:{},budget:56};
 let st=K.load(KEY,DEF);
+// oudere opslag (eerste versie van Eten): plan en prijzen opnieuw beginnen, voorraad en vinkjes behouden
+try{const raw=JSON.parse(localStorage.getItem(KEY));if(raw&&raw.v!==2){st={...structuredClone(DEF),pantry:{...DEF.pantry,...(raw.pantry||{})},supp:raw.supp||{}};K.save(KEY,st)}}catch(e){}
 const save=()=>{K.save(KEY,st);publish()};
-const R=id=>RECIPES.find(r=>r.id===id);
+
+const RM=new Map(RECIPES.map(r=>[r.id,r])),RL={};
+const R=id=>RM.get(id);
+const price=nm=>st.prices[nm]??ING[nm][8];
+const bprice=nm=>st.prices[nm]??BASIS[nm][0];
+const perG=nm=>price(nm)/ING[nm][7];
 const MEAL={o:'Ontbijt',l:'Lunch',d:'Diner',s:'Tussendoor',s2:'Extra tussendoor'};
+const EQ={pot:'Kookpan',pan:'Koekenpan',airfryer:'Airfryer'};
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const today=()=>dkey(new Date());
 const weight=()=>+K.profile().weight||70;
+function sex(){try{return JSON.parse(localStorage.getItem('kern.tempo.v1'))?.settings?.sex||'m'}catch(e){return'm'}}
+const feTarget=()=>(sex()==='f'?16:11)*1.8;
 
+/* ---------- voeding en kosten per portie ---------- */
+// kosten = verbruik (gram × prijs per gram); de kassaprijs met hele verpakkingen volgt bij Boodschappen
 function nut(r,sc=1){const o={kcal:0,kh:0,ei:0,vet:0,vz:0,fe:0,ca:0,eur:0};
   for(const[k,g]of Object.entries(r.ing)){const i=ING[k];if(!i)continue;const f=g*sc/100;
-    o.kcal+=i[0]*f;o.kh+=i[1]*f;o.ei+=i[2]*f;o.vet+=i[3]*f;o.vz+=i[4]*f;o.fe+=i[5]*f;o.ca+=i[6]*f;o.eur+=i[7]*f}
+    o.kcal+=i[0]*f;o.kh+=i[1]*f;o.ei+=i[2]*f;o.vet+=i[3]*f;o.vz+=i[4]*f;o.fe+=i[5]*f;o.ca+=i[6]*f;o.eur+=g*sc*perG(k)}
   return o}
+let N1={};const n1=r=>N1[r.id]??(N1[r.id]=nut(r));
 
 /* ---------- dagtype uit het trainingsschema ---------- */
 // koolhydraten in g per kg lichaamsgewicht per dag (Burke et al. 2011; Thomas et al. 2016)
@@ -99,46 +118,94 @@ function dayCls(k){const f=tempo();let c=f?.days?.[k]?.cls||'easy';
   return CLS[c]?c:'easy'}
 const training=k=>tempo()?.days?.[k]?.t||'';
 const slotsFor=k=>['o','l','d','s'].concat(['hard','long','laden'].includes(dayCls(k))?['s2']:[]);
+const hash=s=>{let h=7;for(const ch of String(s))h=(h*31+ch.charCodeAt(0))>>>0;return h};
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
-/* ---------- planner ---------- */
-function score(r,c){const n=nut(r),khE=n.kh*4/n.kcal,eiE=n.ei*4/n.kcal;
+/* ---------- geschiktheid van een gerecht voor een dagtype ---------- */
+function score(r,c){const n=n1(r),khE=n.kh*4/n.kcal,eiE=n.ei*4/n.kcal;
   if(c==='laden'||c==='race')return khE+(r.race?.5:0)-n.vz/100;
   if(c==='long'||c==='hard')return khE+eiE*.9-(r.race?.15:0);
   if(c==='rest')return eiE*1.3+n.fe/40-(r.race?.25:0);
   return eiE+khE*.3-(r.race?.25:0)}
-const hash=s=>{let h=7;for(const ch of s)h=(h*31+ch.charCodeAt(0))>>>0;return h};
 function slotCls(k,slot){let c=dayCls(k);
   // de avond vóór een lange duurloop of wedstrijd telt het diner al mee
   if(slot==='d'){const t=dayCls(dkey(addDays(pd(k),1)));if(['long','race'].includes(t)&&!['laden','race'].includes(c))c='long'}
   return c}
 function ranked(k,slot){const m=slot==='s2'?'s':slot,c=slotCls(k,slot);
   return RECIPES.filter(r=>r.m===m).sort((a,b)=>score(b,c)-score(a,c))}
-function pick(k,slot,avoid){const cand=ranked(k,slot);
-  const top=cand.slice(0,slot==='d'?6:4).filter(r=>!avoid.includes(r.id));
-  const pool=top.length?top:cand;return pool[hash(k+slot+st.salt)%pool.length].id}
-function ensure(k){const p=st.plan[k]=st.plan[k]||{},sl=slotsFor(k);
-  const prev=[1,2].flatMap(n=>Object.values(st.plan[dkey(addDays(pd(k),-n))]||{}));
-  for(const s of sl)if(!p[s]||!R(p[s]))p[s]=pick(k,s,[...prev,...Object.values(p)]);
-  for(const s of Object.keys(p))if(!sl.includes(s))delete p[s];
-  return p}
-function day(k){const p=ensure(k),c=dayCls(k),w=weight(),target=CLS[c].kh*w;
-  const raw=Object.values(p).reduce((x,id)=>x+nut(R(id)).kh,0);
-  const sc=Math.max(.8,Math.min(1.5,Math.round(target/raw*20)/20));
+
+/* ---------- dag en week ---------- */
+function dayCalc(k,p){const c=dayCls(k),w=weight(),target=CLS[c].kh*w,ids=Object.values(p);
+  const raw=ids.reduce((x,id)=>x+n1(R(id)).kh,0)||1,sc=clamp(Math.round(target/raw*20)/20,.8,1.5);
   const tot={kcal:0,kh:0,ei:0,vet:0,vz:0,fe:0,ca:0,eur:0};
-  for(const id of Object.values(p)){const n=nut(R(id),sc);for(const x in tot)tot[x]+=n[x]}
-  return{k,p,c,sc,tot,target,eiT:1.7*w}}
+  for(const id of ids){const n=n1(R(id));for(const x in tot)tot[x]+=n[x]*sc}
+  return{k,p,c,sc,tot,target,eiT:1.6*w}}
 const weekDays=()=>Array.from({length:7},(_,i)=>dkey(addDays(new Date(),i)));
-function planWeek(){const cut=dkey(addDays(new Date(),-3));for(const k of Object.keys(st.plan))if(k<cut)delete st.plan[k];return weekDays().map(day)}
+
+// Wat de week kost: verse producten per hele verpakking, houdbare producten naar verbruik
+// (het restant gebruik je volgende week) met een kleine straf voor een bijna lege verpakking.
+function weekNeeds(days){const need={};
+  for(const d of days)for(const id of Object.values(d.p))for(const[nm,g]of Object.entries(R(id).ing))need[nm]=(need[nm]||0)+g*d.sc;
+  return need}
+const rl=r=>RL[r.id]??(RL[r.id]=Object.entries(r.ing));
+function objective(plan,keys){
+  const w=weight(),feT=feTarget(),need={},cnt={};let pen=0;
+  for(let i=0;i<keys.length;i++){const k=keys[i],p=plan[k],d=dayCalc(k,p);
+    for(const s in p){const id=p[s];cnt[id]=(cnt[id]||0)+1;
+      if(i&&(s==='d'||s==='l')&&plan[keys[i-1]][s]===id)pen+=s==='d'?3:2;
+      for(const[nm,g]of rl(RM.get(id)))need[nm]=(need[nm]||0)+g*d.sc}
+    pen+=Math.max(0,1.6*w-d.tot.ei)*.12+Math.max(0,d.target-d.tot.kh)*.02+Math.max(0,.8*feT-d.tot.fe)*.2+Math.max(0,700-d.tot.ca)*.002}
+  for(const id in cnt){const lim=RM.get(id).m==='d'?2:3;if(cnt[id]>lim)pen+=3*(cnt[id]-lim)}
+  let cost=0;
+  for(const nm in need){if(st.pantry[nm])continue;const a=ING[nm],pr=price(nm),packs=need[nm]/a[7];
+    cost+=a[11]?packs*pr+.15*(Math.ceil(packs-1e-9)-packs)*pr:Math.ceil(packs-1e-9)*pr}
+  return cost+pen}
+// Zoekt de goedkoopste week: meerdere keren opnieuw beginnen (willekeurige start), telkens maaltijden
+// wisselen en alleen verbeteringen houden; de beste uitkomst wint.
+function optimize(free){
+  const keys=weekDays(),pools={},base={};
+  keys.forEach(k=>{base[k]=free.includes(k)?{}:{...st.plan[k]}});
+  free.forEach(k=>slotsFor(k).forEach(s=>{const cls=slotCls(k,s),n=(cls==='laden'||cls==='race')?6:12;
+    pools[k+'|'+s]=ranked(k,s).slice(0,n).map(r=>r.id)}));
+  const moves=Object.keys(pools);if(!moves.length)return;
+  let best=null,bestV=Infinity;
+  const restarts=free.length>=5?8:4,iters=Math.min(1800,200*moves.length);   // een enkele nieuwe dag is snel klaar
+  for(let r=0;r<restarts;r++){
+    const rnd=rng(hash(keys[0]+st.salt+'#'+r)),plan={};
+    keys.forEach(k=>{plan[k]={...base[k]}});
+    moves.forEach(mv=>{const[k,s]=mv.split('|'),pl=pools[mv];plan[k][s]=r===0?pl[0]:pl[rnd()*pl.length|0]});
+    let cur=objective(plan,keys);
+    for(let i=0;i<iters;i++){const mv=moves[rnd()*moves.length|0],[k,s]=mv.split('|'),pl=pools[mv],id=pl[rnd()*pl.length|0],old=plan[k][s];
+      if(id===old)continue;plan[k][s]=id;const v=objective(plan,keys);if(v<=cur)cur=v;else plan[k][s]=old}
+    if(cur<bestV){bestV=cur;best=plan}}
+  free.forEach(k=>{st.plan[k]=best[k]})}
+function planWeek(){
+  const ks=weekDays(),cut=dkey(addDays(new Date(),-3));
+  for(const k of Object.keys(st.plan))if(k<cut)delete st.plan[k];
+  const free=[];
+  ks.forEach(k=>{const p=st.plan[k],sl=slotsFor(k);
+    if(!p||sl.some(s=>!p[s]||!R(p[s])))free.push(k);else for(const s of Object.keys(p))if(!sl.includes(s))delete p[s]});
+  if(free.length){free.forEach(k=>delete st.plan[k]);optimize(free);K.save(KEY,st)}
+  return ks.map(k=>dayCalc(k,st.plan[k]))}
+const day=k=>{planWeek();return dayCalc(k,st.plan[k])};
+
+/* ---------- boodschappen: hele verpakkingen ---------- */
+function shopping(){const days=planWeek(),need=weekNeeds(days),bs=new Set();
+  for(const d of days)for(const id of Object.values(d.p))(R(id).bs||[]).forEach(b=>bs.add(b));
+  const items=[];let kassa=0,use=0;
+  for(const[nm,g]of Object.entries(need)){if(st.pantry[nm])continue;const a=ING[nm],pr=price(nm),n=Math.ceil(g/a[7]-1e-9);
+    kassa+=n*pr;use+=g/a[7]*pr;items.push({nm,g,n,pr,packG:a[7],unit:a[9],cat:a[10]})}
+  let basis=0;const bl=[];
+  for(const b of bs){if(st.pantry[b])continue;const p=bprice(b);basis+=p;bl.push({nm:b,pr:p,pack:BASIS[b][1]})}
+  return{items,bl,kassa,use,basis,days}}
+const amount=(nm,g)=>{const liq=/melk|sap|olijfolie/.test(nm),v=g<20?Math.round(g):Math.round(g/5)*5;return liq?(v>=1000?nl(v/1000,1)+' l':v+' ml'):(v>=1000?nl(v/1000,1)+' kg':v+' g')};
+const gDisp=(nm,g)=>amount(nm,g)+(/(kikkererwten|bonen|maïs) \(blik\)/.test(nm)?' uitgelekt':'');
 
 /* ---------- vandaag ---------- */
 const pctColor=p=>p>=1?'var(--c-peak)':p>=.8?'var(--c-good)':p>=.6?'var(--c-mid)':'var(--c-warn)';
-function sex(){try{return JSON.parse(localStorage.getItem('kern.tempo.v1'))?.settings?.sex||'m'}catch(e){return'm'}}
 function renderHome(){
-  const d=day(today()),t=d.tot,feT=(sex()==='f'?16:11)*1.8,caT=1000;
-  const tr=training(d.k);
+  const d=day(today()),t=d.tot,feT=feTarget(),caT=1000,tr=training(d.k),gap=d.target-t.kh,sup=st.supp[d.k]||{};
   $('#home-sub').textContent=`${CLS[d.c].l}${tr?' · '+tr:''}`;
-  const gap=d.target-t.kh;
-  const sup=st.supp[d.k]||{};
   $('#home-body').innerHTML=`
   <div class="card">
     <div class="hero"><div><div class="big">${Math.round(d.target)}<small>g koolh.</small></div></div><div class="right">${CLS[d.c].h}</div></div>
@@ -147,7 +214,7 @@ function renderHome(){
       <div class="stat"><div class="v" style="color:${pctColor(t.ei/d.eiT)}">${Math.round(t.ei)}</div><div class="k">g eiwit · doel ${Math.round(d.eiT)}</div></div>
       <div class="stat"><div class="v">${Math.round(t.kcal/10)*10}</div><div class="k">kcal</div></div>
     </div>
-    <div class="legend" style="margin-top:12px"><span class="muted" style="font-size:14px">${nl(CLS[d.c].kh)} g per kg bij ${nl(weight())} kg${d.sc!==1?` · porties × ${nl(d.sc,2)}`:''}</span><button class="info" data-info="carbs">Hoe werkt dit?</button></div>
+    <div class="legend" style="margin-top:12px"><span class="muted" style="font-size:14px">${nl(CLS[d.c].kh)} g per kg bij ${nl(weight())} kg${d.sc!==1?` · porties × ${nl(d.sc,2)}`:''} · ≈ ${eur(t.eur,2)} vandaag</span><button class="info" data-info="carbs">Hoe werkt dit?</button></div>
   </div>
   ${gap>d.target*.07?`<div class="banner" style="--d:var(--c-mid)"><span class="bar"></span><div>Nog ongeveer <b>${Math.round(gap/10)*10} g koolhydraten</b> tekort ten opzichte van je doel. Vul aan met sap, sportdrank, rijstwafels of een extra schep rijst of pasta.</div></div>`:''}
   <div class="label">Menu van vandaag</div>
@@ -165,42 +232,47 @@ function renderHome(){
   <div class="label">Profiel</div>
   <div class="card">
     <div class="field"><label>Lichaamsgewicht (kg)</label><input id="p-weight" type="number" inputmode="decimal" value="${weight()}"></div>
-    <div class="hint">Alleen gebruikt om je doelen te berekenen. Blijft op je toestel.</div>
+    <div class="hint">Alleen gebruikt om je doelen en porties te berekenen. Blijft op je toestel. Een zwaarder gewicht betekent grotere porties en dus hogere boodschappen.</div>
   </div>
-  <div class="label">Wetenschap</div>
+  <div class="label">Uitleg</div>
   <div class="list">${Object.entries(INFO).map(([k,v])=>`<div class="item plain" data-info="${k}"><div class="meta"><div class="nm">${v.t}</div><div class="ds">${v.s}</div></div><span class="muted">›</span></div>`).join('')}</div>
-  <div class="hint" style="text-align:center;margin-top:24px">Eten · onderdeel van Kern · voedingswaarden zijn schattingen</div>`;
+  <div class="hint" style="text-align:center;margin-top:24px">Eten · onderdeel van Kern · voedingswaarden en prijzen zijn schattingen</div>`;
   $$('[data-supp]').forEach(b=>b.onclick=()=>{const s=st.supp[d.k]=st.supp[d.k]||{};s[b.dataset.supp]=!s[b.dataset.supp];save();renderHome()});
-  $('#p-weight').onchange=e=>{const p=K.profile();p.weight=Math.max(35,Math.min(150,+String(e.target.value).replace(',','.')||70));K.saveProfile(p);save();render();toast('Opgeslagen')};
+  $('#p-weight').onchange=e=>{const p=K.profile();p.weight=clamp(+String(e.target.value).replace(',','.')||70,35,150);K.saveProfile(p);N1={};st.plan={};save();render();toast('Opgeslagen, week opnieuw gepland')};
 }
 function mealItem(d,s,id){const r=R(id),n=nut(r,d.sc);
   return `<div class="item" data-meal="${d.k},${s}"><div class="ring sm">${ringSVG(n.kh/d.tot.kh*2.2,'var(--c-good)',58)}<div class="in" style="background:#2b3a2e;color:#bfe8b5">${MEAL[s][0]}</div></div><div class="meta"><div class="nm">${esc(r.n)}</div><div class="ds">${MEAL[s]} · ${r.t} min · ${Math.round(n.kh)} g koolh. · ${Math.round(n.ei)} g eiwit</div></div><div class="sc">${Math.round(n.kcal/10)*10}</div></div>`}
 
 /* ---------- week ---------- */
-function renderWeek(){
-  $('#week-body').innerHTML=planWeek().map((d,i)=>`<div class="week ${i===0?'cur':''}"><div class="week-h"><b>${i===0?'Vandaag':i===1?'Morgen':K.fmtDate(pd(d.k),{weekday:'long',day:'numeric',month:'short'})}</b><span class="muted">${CLS[d.c].l} · ${Math.round(d.target)} g</span></div>
+function renderWeek(){const S=shopping();
+  $('#week-sub').textContent=`Boodschappen deze week ≈ ${eur(S.kassa)} · ${S.items.length} producten`;
+  $('#week-body').innerHTML=S.days.map((d,i)=>`<div class="week ${i===0?'cur':''}"><div class="week-h"><b>${i===0?'Vandaag':i===1?'Morgen':K.fmtDate(pd(d.k),{weekday:'long',day:'numeric',month:'short'})}</b><span class="muted">${CLS[d.c].l} · ${Math.round(d.target)} g · ${eur(d.tot.eur,2)}</span></div>
     <div class="muted" style="margin:4px 0 10px;font-size:15px">${esc(training(d.k)||'Geen training in het schema')}</div>
-    ${Object.entries(d.p).map(([s,id])=>{const r=R(id),n=nut(r,d.sc);return `<div class="day" data-meal="${d.k},${s}" style="cursor:pointer"><span class="d">${MEAL[s][0]}</span><span class="s">${esc(r.n)}<small>${Math.round(n.kcal/10)*10} kcal · ${Math.round(n.kh)} g koolh. · ${Math.round(n.ei)} g eiwit</small></span><span class="muted">›</span></div>`}).join('')}</div>`).join('');
+    ${Object.entries(d.p).map(([s,id])=>{const r=R(id),n=nut(r,d.sc);return `<div class="day" data-meal="${d.k},${s}" style="cursor:pointer"><span class="d">${MEAL[s][0]}</span><span class="s">${esc(r.n)}<small>${Math.round(n.kcal/10)*10} kcal · ${Math.round(n.kh)} g koolh. · ${Math.round(n.ei)} g eiwit · ${eur(n.eur,2)}</small></span><span class="muted">›</span></div>`}).join('')}</div>`).join('');
 }
-$('#replan').onclick=()=>{weekDays().forEach(k=>delete st.plan[k]);st.salt++;save();render();toast('Nieuw weekmenu')};
+$('#replan').onclick=()=>{st.plan={};st.salt++;save();render();toast('Nieuwe goedkoopste week gepland')};
 
 /* ---------- recept ---------- */
-const amount=(name,g)=>{const liq=/melk|sap/.test(name),v=g<20?Math.round(g):Math.round(g/5)*5;return liq?(v>=1000?nl(v/1000,1)+' l':v+' ml'):(v>=1000?nl(v/1000,1)+' kg':v+' g')};
 function recipeSheet(id,k,slot){const r=R(id),sc=k?day(k).sc:1,n=nut(r,sc);
-  openSheet(`<h2>${esc(r.n)}</h2><div class="muted" style="margin-bottom:12px">${MEAL[r.m]} · ${r.t} min${sc!==1?` · portie × ${nl(sc,2)}`:''}${r.race?' · wedstrijdproof':''}</div>
+  const chips=[MEAL[r.m],r.t+' min',...(r.eq||[]).map(e=>EQ[e]),r.race?'wedstrijdproof':'',r.b?'maak dubbel':''].filter(Boolean);
+  openSheet(`<h2>${esc(r.n)}</h2>
+    <div class="pills" style="margin:6px 0 14px">${chips.map(c=>`<span class="chip">${esc(c)}</span>`).join('')}</div>
     <div class="stats"><div class="stat"><div class="v">${Math.round(n.kcal/10)*10}</div><div class="k">kcal</div></div><div class="stat"><div class="v">${Math.round(n.kh)} g</div><div class="k">koolhydraten</div></div><div class="stat"><div class="v">${Math.round(n.ei)} g</div><div class="k">eiwit</div></div></div>
     <div class="stats" style="margin-top:10px"><div class="stat"><div class="v">${Math.round(n.vet)} g</div><div class="k">vet</div></div><div class="stat"><div class="v">${Math.round(n.vz)} g</div><div class="k">vezels</div></div><div class="stat"><div class="v">${nl(n.fe,1)}</div><div class="k">mg ijzer</div></div></div>
-    <h3>Ingrediënten</h3>${Object.entries(r.ing).map(([nm,g])=>`<div class="row"><span>${esc(nm)}</span><b>${amount(nm,g*sc)}</b></div>`).join('')}
-    ${r.x?`<div class="hint">Verder: ${esc(r.x)}</div>`:''}
-    <h3>Bereiding</h3><p>${esc(r.s)}</p>
-    <div class="hint">Geschatte kosten ${eur(n.eur,2)}</div>
+    <h3>Ingrediënten${sc!==1?` <span class="muted" style="font-weight:500;font-size:14px">portie × ${nl(sc,2)}</span>`:''}</h3>
+    ${Object.entries(r.ing).map(([nm,g])=>`<div class="row"><span>${esc(cap(nm))}</span><b>${gDisp(nm,g*sc)}</b></div>`).join('')}
+    ${r.bs&&r.bs.length?`<div class="hint">Uit je basisvoorraad: ${esc(r.bs.join(', '))}</div>`:''}
+    <h3>Bereiding</h3><ol>${r.st.map(s=>`<li>${esc(s)}</li>`).join('')}</ol>
+    ${(r.eq||[]).includes('airfryer')?`<div class="hint">Airfryertijden zijn een startpunt: elk toestel verschilt. Kijk een paar minuten eerder. <button class="info" data-info="airfryer" style="padding:0">Tips</button></div>`:''}
+    ${r.b?`<div class="hint">Kook gerust dubbel. Bewaar restjes binnen 2 uur in de koelkast en eet ze binnen 2 dagen op, of vries ze in. <button class="info" data-info="storage" style="padding:0">Bewaren</button></div>`:''}
+    <div class="hint">Ingrediënten ≈ ${eur(n.eur,2)} per portie (naar verbruik, zonder basisvoorraad).</div>
     ${k?`<button class="btn pri" id="r-swap">Kies een ander gerecht</button>`:`<button class="btn pri" id="r-today">Zet vandaag op het menu</button>`}`);
   if(k)$('#r-swap').onclick=()=>swapSheet(k,slot);
-  else $('#r-today').onclick=()=>{ensure(today())[r.m]=r.id;save();closeSheet();render();toast('Staat op het menu van vandaag')};
+  else $('#r-today').onclick=()=>{day(today());st.plan[today()][r.m]=r.id;save();closeSheet();render();toast('Staat op het menu van vandaag')};
 }
 function swapSheet(k,slot){const d=day(k);
   openSheet(`<h2>${MEAL[slot]} wisselen</h2><p>Gesorteerd op wat het best past bij deze dag (${CLS[slotCls(k,slot)].l.toLowerCase()}).</p>
-    <div class="list" style="background:var(--card-2)">${ranked(k,slot).map(r=>{const n=nut(r,d.sc);return `<div class="item plain" data-set="${r.id}"><div class="meta"><div class="nm">${esc(r.n)}</div><div class="ds">${r.t} min · ${Math.round(n.kh)} g koolh. · ${Math.round(n.ei)} g eiwit</div></div><div class="sc" style="font-size:17px">${d.p[slot]===r.id?'✓':Math.round(n.kcal/10)*10}</div></div>`}).join('')}</div>`);
+    <div class="list" style="background:var(--card-2)">${ranked(k,slot).map(r=>{const n=nut(r,d.sc);return `<div class="item plain" data-set="${r.id}"><div class="meta"><div class="nm">${esc(r.n)}</div><div class="ds">${r.t} min · ${Math.round(n.kh)} g koolh. · ${Math.round(n.ei)} g eiwit · ${eur(n.eur,2)}</div></div><div class="sc" style="font-size:17px">${d.p[slot]===r.id?'✓':Math.round(n.kcal/10)*10}</div></div>`}).join('')}</div>`);
   $$('[data-set]').forEach(b=>b.onclick=()=>{st.plan[k][slot]=b.dataset.set;save();closeSheet();render();toast('Gewisseld')});
 }
 document.addEventListener('click',e=>{const m=e.target.closest('[data-meal]');if(m){const[k,s]=m.dataset.meal.split(',');recipeSheet(st.plan[k][s],k,s)}
@@ -208,57 +280,80 @@ document.addEventListener('click',e=>{const m=e.target.closest('[data-meal]');if
 
 /* ---------- boodschappen ---------- */
 let shopMode='list';
-function shopping(){const agg={};
-  for(const d of planWeek())for(const id of Object.values(d.p))for(const[nm,g]of Object.entries(R(id).ing))agg[nm]=(agg[nm]||0)+g*d.sc;
-  return Object.entries(agg).filter(([nm])=>!st.pantry[nm]).map(([nm,g])=>({nm,g,cat:ING[nm][8],eur:ING[nm][7]*g/100}))}
 const CATS=['Groente & fruit','Brood & granen','Peulvruchten & tofu','Zuivelvervangers','Noten & zaden','Houdbaar','Diepvries'];
 function renderShop(){
-  const items=shopping(),total=items.reduce((x,i)=>x+i.eur,0),left=items.filter(i=>!st.bought[i.nm]);
-  const g=K.feed.get('geld');
-  $('#shop-sub').textContent=`${left.length} van ${items.length} producten nog te kopen`;
-  $('#shop-hero').innerHTML=`<div class="card"><div class="hero"><div><div class="big">${eur(total).replace('€ ','€')}<small>geschat</small></div></div><div class="right">Menu voor 7 dagen · ${eur(total/7,2)} per dag</div></div>
-    <div style="margin-top:14px"><div class="row"><span>Nog te kopen</span><b>${eur(left.reduce((x,i)=>x+i.eur,0),2)}</b></div>${g&&g.groceries7!=null?`<div class="row"><span>Werkelijk uitgegeven · 7 dgn</span><b>${eur(g.groceries7,2)} <span class="muted">(Geld)</span></b></div>`:''}</div>
-    <div class="hint">Prijzen zijn grove schattingen per product; wat je altijd in huis hebt, zet je onder Voorraad.</div></div>`;
+  const S=shopping(),left=S.items.filter(i=>!st.bought[i.nm]),g=K.feed.get('geld'),diff=st.budget-S.kassa;
+  $('#shop-sub').textContent=`${left.length} van ${S.items.length} producten nog te kopen`;
+  $('#shop-hero').innerHTML=`<div class="card"><div class="hero"><div><div class="big long">${eur(S.kassa)}<small>kassa</small></div></div>
+    <div class="right" style="color:${diff>=0?'var(--c-peak)':'var(--c-mid)'}">${diff>=0?`${eur(diff)} onder`:`${eur(-diff)} boven`} je budget van ${eur(st.budget)}</div></div>
+    <div class="stats"><div class="stat"><div class="v">${eur(S.use)}</div><div class="k">echt verbruik</div></div><div class="stat"><div class="v">${eur(S.basis)}</div><div class="k">basis, eenmalig</div></div><div class="stat"><div class="v">${S.items.length}</div><div class="k">producten</div></div></div>
+    ${g&&g.groceries7!=null?`<div class="row" style="margin-top:12px"><span>Werkelijk uitgegeven · 7 dgn</span><b>${eur(g.groceries7,2)} <span class="muted">(Geld)</span></b></div>`:''}
+    <div class="field" style="margin-top:8px"><label>Budget per week (€)</label><input id="s-budget" type="number" inputmode="numeric" value="${st.budget}"></div>
+    <div class="hint">Prijzen zijn mijn schatting voor budgetmerken en niet gecontroleerd. Tik op een product om de echte prijs in te vullen. <button class="info" data-info="prices" style="padding:0">Hoe werkt dit?</button></div></div>`;
+  $('#s-budget').onchange=e=>{st.budget=Math.max(10,+e.target.value||56);save();renderShop()};
   if(shopMode==='list'){
-    $('#shop-body').innerHTML=CATS.map(c=>{const xs=items.filter(i=>i.cat===c).sort((a,b)=>a.nm.localeCompare(b.nm));
-      return xs.length?`<div class="label">${c}</div><div class="list">${xs.map(i=>`<div class="item plain ${st.bought[i.nm]?'done':''}" data-buy="${esc(i.nm)}"><button class="check ${st.bought[i.nm]?'on':''}" aria-label="Gekocht">${st.bought[i.nm]?'✓':''}</button><div class="meta"><div class="nm" style="font-weight:500">${esc(i.nm[0].toUpperCase()+i.nm.slice(1))}</div></div><div class="muted num">${amount(i.nm,i.g)}</div></div>`).join('')}</div>`:''}).join('')
+    const row=(nm,sub,qty,pr)=>`<div class="item plain ${st.bought[nm]?'done':''}" data-buy="${esc(nm)}"><button class="check ${st.bought[nm]?'on':''}" aria-label="Gekocht">${st.bought[nm]?'✓':''}</button><div class="meta"><div class="nm" style="font-weight:500">${esc(cap(nm))}</div><div class="ds">${sub}</div></div><div style="text-align:right"><div class="num" style="font-size:15px">${qty}</div><div class="muted num" style="font-size:13px">${eur(pr,2)}</div></div></div>`;
+    $('#shop-body').innerHTML=CATS.map(c=>{const xs=S.items.filter(i=>i.cat===c).sort((a,b)=>a.nm.localeCompare(b.nm));
+      return xs.length?`<div class="label">${c}</div><div class="list">${xs.map(i=>row(i.nm,`nodig ${gDisp(i.nm,i.g)}`,`${i.n} × ${i.unit}`,i.n*i.pr)).join('')}</div>`:''}).join('')
+      +(S.bl.length?`<div class="label">Basisvoorraad · kruiden en saus</div><div class="list">${S.bl.sort((a,b)=>a.nm.localeCompare(b.nm)).map(b=>row(b.nm,'blijft maanden goed; zet na aankoop bij In huis',`1 × ${b.pack}`,b.pr)).join('')}</div>`:'')
       +`<button class="btn" id="unbuy" style="margin-top:18px">Vinkjes wissen</button>`;
-    $$('[data-buy]').forEach(b=>b.onclick=()=>{const n=b.dataset.buy;st.bought[n]=!st.bought[n];save();renderShop()});
     $('#unbuy').onclick=()=>{st.bought={};save();renderShop()};
   }else{
-    $('#shop-body').innerHTML=`<div class="hint" style="margin:0 4px 6px">Vink aan wat je altijd in huis hebt. Dat verdwijnt van de lijst en uit de kosten.</div>`+CATS.map(c=>{const xs=Object.keys(ING).filter(n=>ING[n][8]===c).sort();
-      return `<div class="label">${c}</div><div class="list">${xs.map(n=>`<div class="item plain" data-pan="${esc(n)}"><button class="check ${st.pantry[n]?'on':''}" aria-label="In huis">${st.pantry[n]?'✓':''}</button><div class="meta"><div class="nm" style="font-weight:500">${esc(n[0].toUpperCase()+n.slice(1))}</div></div></div>`).join('')}</div>`}).join('');
+    $('#shop-body').innerHTML=`<div class="hint" style="margin:0 4px 6px">Vink aan wat je al in huis hebt. Dat verdwijnt van de lijst en uit de kosten. Plan daarna de week opnieuw om er rekening mee te houden.</div>`
+      +CATS.map(c=>{const xs=Object.keys(ING).filter(n=>ING[n][10]===c).sort();
+        return `<div class="label">${c}</div><div class="list">${xs.map(n=>`<div class="item plain" data-pan="${esc(n)}"><button class="check ${st.pantry[n]?'on':''}" aria-label="In huis">${st.pantry[n]?'✓':''}</button><div class="meta"><div class="nm" style="font-weight:500">${esc(cap(n))}</div></div></div>`).join('')}</div>`}).join('')
+      +`<div class="label">Basisvoorraad · kruiden en saus</div><div class="list">${Object.keys(BASIS).sort().map(n=>`<div class="item plain" data-pan="${esc(n)}"><button class="check ${st.pantry[n]?'on':''}" aria-label="In huis">${st.pantry[n]?'✓':''}</button><div class="meta"><div class="nm" style="font-weight:500">${esc(cap(n))}</div></div></div>`).join('')}</div>`;
     $$('[data-pan]').forEach(b=>b.onclick=()=>{const n=b.dataset.pan;if(st.pantry[n])delete st.pantry[n];else st.pantry[n]=1;save();renderShop()});
   }
 }
+$('#shop-body').addEventListener('click',e=>{const row=e.target.closest('[data-buy]');if(!row)return;const n=row.dataset.buy;
+  if(e.target.closest('.check')){st.bought[n]=!st.bought[n];save();renderShop()}else priceSheet(n)});
 K.segmented($('#shop-mode'),v=>{shopMode=v;renderShop()});
+function priceSheet(nm){const bs=!ING[nm],a=bs?null:ING[nm],cur=bs?bprice(nm):price(nm),unit=bs?BASIS[nm][1]:a[9];
+  openSheet(`<h2>${esc(cap(nm))}</h2><div class="muted" style="margin-bottom:10px">${bs?`1 ${esc(unit)}`:`1 ${esc(unit)} = ${gDisp(nm,a[7])}`}</div>
+    <div class="field"><label>Prijs per ${esc(unit)} (€)</label><input id="pp" type="text" inputmode="decimal" value="${nl(cur,2)}"></div>
+    <div class="hint">${st.prices[nm]!=null?'Dit is je eigen prijs.':'Dit is mijn schatting. Vul de prijs van je kassabon in zodat het totaal klopt.'}</div>
+    <button class="btn pri" id="pp-save">Prijs opslaan</button>
+    <button class="btn" id="pp-home">${st.pantry[nm]?'Niet meer in huis':'Heb ik in huis'}</button>
+    ${st.prices[nm]!=null?'<button class="btn" id="pp-reset">Mijn schatting terugzetten</button>':''}`);
+  $('#pp-save').onclick=()=>{const v=+String($('#pp').value).replace(',','.');if(!(v>0&&v<100))return toast('Vul een prijs in');st.prices[nm]=v;N1={};save();closeSheet();render();toast('Prijs opgeslagen')};
+  $('#pp-home').onclick=()=>{if(st.pantry[nm])delete st.pantry[nm];else st.pantry[nm]=1;save();closeSheet();render()};
+  const rs=$('#pp-reset');if(rs)rs.onclick=()=>{delete st.prices[nm];N1={};save();closeSheet();render()};
+}
 
 /* ---------- recepten ---------- */
-let recFilter='';
+let recFilter='',recSort='std';
 function renderRec(){const q=$('#q').value.toLowerCase();
-  const arr=RECIPES.filter(r=>(!recFilter||r.m===recFilter)&&(!q||r.n.toLowerCase().includes(q)||Object.keys(r.ing).some(i=>i.includes(q))));
-  $('#rec-sub').textContent=`${RECIPES.length} plantaardige recepten`;
-  $('#rec-list').innerHTML=arr.length?arr.map(r=>{const n=nut(r),khE=n.kh*4/n.kcal;
-    const tag=r.race?'wedstrijdproof':khE>.6?'koolhydraatrijk':n.ei>=28?'eiwitrijk':'';
-    return `<div class="item" data-rec="${r.id}"><div class="ring sm">${ringSVG(khE,'var(--c-good)',58)}<div class="in" style="background:#1f1f21;font-size:14px">${r.t}′</div></div><div class="meta"><div class="nm">${esc(r.n)}</div><div class="ds">${[MEAL[r.m],Math.round(n.kh)+' g koolh.',Math.round(n.ei)+' g eiwit',tag].filter(Boolean).join(' · ')}</div></div><div class="sc" style="font-size:17px">${Math.round(n.kcal/10)*10}</div></div>`}).join(''):'<div class="empty">Geen recepten gevonden.</div>';
+  let arr=RECIPES.filter(r=>(!recFilter||r.m===recFilter)&&(!q||r.n.toLowerCase().includes(q)||Object.keys(r.ing).some(i=>i.includes(q))));
+  if(recSort==='cheap')arr=[...arr].sort((a,b)=>n1(a).eur/n1(a).kcal-n1(b).eur/n1(b).kcal);
+  if(recSort==='prot')arr=[...arr].sort((a,b)=>n1(b).ei/n1(b).kcal-n1(a).ei/n1(a).kcal);
+  $('#rec-sub').textContent=`${RECIPES.length} plantaardige recepten · alleen gasfornuis en airfryer`;
+  $('#rec-list').innerHTML=arr.length?arr.map(r=>{const n=n1(r),khE=n.kh*4/n.kcal;
+    const tag=r.race?'wedstrijdproof':n.ei*4/n.kcal>.25?'eiwitrijk':khE>.62?'koolhydraatrijk':'';
+    return `<div class="item" data-rec="${r.id}"><div class="ring sm">${ringSVG(khE,'var(--c-good)',58)}<div class="in" style="background:#1f1f21;font-size:14px">${r.t}′</div></div><div class="meta"><div class="nm">${esc(r.n)}</div><div class="ds">${[MEAL[r.m],Math.round(n.kcal/10)*10+' kcal',Math.round(n.ei)+' g eiwit',tag].filter(Boolean).join(' · ')}</div></div><div class="sc" style="font-size:17px">${eur(n.eur,2)}</div></div>`}).join(''):'<div class="empty">Geen recepten gevonden.</div>';
 }
 K.segmented($('#rec-filter'),v=>{recFilter=v;renderRec()});
+K.segmented($('#rec-sort'),v=>{recSort=v;renderRec()});
 $('#q').oninput=renderRec;
 
-/* ---------- wetenschap ---------- */
+/* ---------- wetenschap en uitleg ---------- */
 const INFO={
-  carbs:{t:'Koolhydraten per trainingsdag',s:'Eten afgestemd op het werk van die dag',b:`<p>Koolhydraten zijn de brandstof voor intensieve en lange inspanning. De aanbeveling is daarom geen vast getal, maar schaalt mee met je training (<b>periodiseren</b> = afstemmen per dag): ongeveer 3–5 g per kg lichaamsgewicht op een rustige dag, 5–7 g bij een uur matige training, 6–10 g bij één tot drie uur duurtraining.</p><p>Deze app gebruikt 4 g/kg op rustdagen, 5 op rustige dagen, 7 op zware dagen en 8 op dagen met een lange duurtraining. Het soort dag komt uit je schema in Tempo. De porties worden daarop geschaald (tussen 0,8 en 1,5 keer).</p><p><b>Kritisch:</b> dit zijn bandbreedtes uit consensusdocumenten, geen individuele voorschriften. Honger, gewichtsverloop en hoe je trainingen voelen zijn betere graadmeters dan het getal.</p><p class="ref">Burke et al. (2011) J Sports Sci · Thomas, Erdman & Burke (2016) Med Sci Sports Exerc · Impey et al. (2018) Sports Med</p>`},
-  protein:{t:'Eiwit bij plantaardig eten',s:'1,7 g per kg per dag',b:`<p>Duursporters hebben meer eiwit nodig dan de algemene norm: ongeveer 1,2–2,0 g per kg per dag. Plantaardig eiwit is gemiddeld iets minder goed verteerbaar en bevat minder leucine (=het aminozuur dat spieropbouw aanzet), daarom rekent de app met <b>1,7 g/kg</b>, verdeeld over de maaltijden.</p><p>Soja (tofu, tempeh, edamame), peulvruchten met granen, en seitan zijn de dragers in deze recepten.</p><p><b>Kritisch:</b> of veganisten echt meer nodig hebben is niet goed gemeten; bij voldoende totale inname lijkt het verschil met dierlijk eiwit klein.</p><p class="ref">Thomas et al. (2016) Med Sci Sports Exerc · Rogerson (2017) J Int Soc Sports Nutr · Hevia-Larraín et al. (2021) Sports Med</p>`},
-  iron:{t:'IJzer en calcium',s:'Waar plantaardige sporters op letten',b:`<p><b>IJzer</b> uit planten (non-heem) wordt minder goed opgenomen dan ijzer uit vlees. Daarom toont de app een richtwaarde van 1,8 keer de gewone aanbeveling. Vitamine C bij de maaltijd (paprika, citroen, sinaasappelsap) verhoogt de opname; koffie en thee rond de maaltijd verlagen die. Duurlopers verliezen bovendien extra ijzer.</p><p><b>Calcium</b>: richtwaarde 1000 mg per dag. Verrijkte sojamelk en sojayoghurt, tofu, boerenkool en tahin leveren het meest.</p><p><b>Kritisch:</b> de factor 1,8 is een schatting uit één rapport en staat ter discussie. Of je ijzerstatus goed is weet je alleen uit bloedonderzoek (ferritine); slik geen ijzer zonder dat te laten meten.</p><p class="ref">Institute of Medicine (2001) Dietary Reference Intakes · Sim et al. (2019) Eur J Appl Physiol · Hurrell & Egli (2010) Am J Clin Nutr</p>`},
+  prices:{t:'Hoe de prijzen werken',s:'Schattingen, hele verpakkingen en basisvoorraad',b:`<p>De prijzen in deze app zijn <b>mijn schatting</b> voor budgetmerken (Lidl, Aldi, AH basic). Ik heb ze niet kunnen controleren tegen actuele schapprijzen. Een paar ankerpunten die ik wel vond (bijvoorbeeld een blik kikkererwten rond € 0,79) lagen in dezelfde buurt, maar dat is te weinig om op te vertrouwen.</p><p><b>Pas ze aan:</b> tik bij Boodschappen op een product en vul de prijs van je kassabon in. Na een paar boodschappen klopt het totaal veel beter.</p><p><b>Kassa en verbruik:</b> aan de kassa betaal je hele verpakkingen. Voor verse producten (brood, tofu, tomaat, banaan) telt een hele verpakking mee. Houdbare producten (pasta, rijst, havermout, blikken) tellen naar verbruik mee, omdat het restant volgende week gebruikt wordt. De eerste week kost daarom meer dan het gemiddelde.</p><p><b>Basisvoorraad:</b> kruiden, saus en bouillon koop je één keer en gebruik je maanden. Dat staat apart in de lijst en niet in het weektotaal. Zet ze na aankoop bij "In huis".</p><p><b>Niet meegerekend:</b> aanbiedingen, een duurdere winkelketen, biologisch, en dingen die je buiten dit menu koopt. Prijzen veranderen ook.</p><p><b>Kritisch:</b> het totaal is dus een richtbedrag, geen garantie. Verschillen van 10 tot 20% zijn normaal.</p>`},
+  budget:{t:'Hoe de goedkoopste week wordt gekozen',s:'Een eenvoudige zoekmethode, geen wiskundig optimum',b:`<p>Voor elke maaltijd kiest de app uit de gerechten die het best passen bij het soort dag (rustdag, zware training, wedstrijd). Daarna probeert hij duizenden keer één maaltijd te wisselen en houdt de wissel als de week daardoor goedkoper wordt.</p><p>Die kosten zijn de verpakkingen die je moet kopen. Zo kiest hij gerechten die dezelfde ingrediënten delen (één pak pasta, één zak linzen), zodat je minder weggooit.</p><p>Er zijn ook straffen voor een week die niet goed is: te weinig eiwit, te weinig koolhydraten voor de dag, te weinig ijzer of calcium, hetzelfde gerecht te vaak, of twee dagen achter elkaar hetzelfde diner.</p><p><b>Kritisch:</b> dit is een heuristiek (snelle zoekmethode) die een goede, maar niet altijd de allerbeste week vindt. Door "Opnieuw plannen" te kiezen krijg je een andere uitkomst. De straffen zijn mijn keuzes, geen voedingsnormen.</p>`},
+  airfryer:{t:'Airfryer: tips en grenzen',s:'Wat de oven deed, doet de airfryer meestal ook',b:`<ul><li>Verwarm 3 minuten voor. Dat maakt vooral bij krokante dingen verschil.</li><li>Leg de mand niet te vol: lucht moet rond het eten kunnen. Rekenen op ongeveer 400 tot 500 gram per ronde is een goed begin; is het meer, bak in twee rondes.</li><li>Dep natte dingen droog (kikkererwten, tofu, groente uit de vriezer) en gebruik maar een druppel olie.</li><li>Schud of draai halverwege.</li><li>Gebruik bakpapier voor airfryers voor zachte dingen zoals koekjes.</li></ul><p><b>Kritisch:</b> de tijden en temperaturen in de recepten zijn een startpunt. Bronnen die ik raadpleegde lopen uiteen (bijvoorbeeld 10 tot 25 minuten voor falafel), en elk toestel is anders. Voor tempeh vond ik geen bron; die tijd is mijn schatting. Kijk de eerste keer een paar minuten eerder en pas aan.</p>`},
+  storage:{t:'Restjes bewaren',s:'Binnen 2 uur koelen, binnen 2 dagen opeten',b:`<p>Volgens de richtlijn van het Voedingscentrum, zoals ik die via derden terugvond, zet je een warme maaltijd binnen 2 uur in de koelkast en eet je hem binnen 2 dagen op. Dat geldt zeker voor rijst en pasta. Wil je langer bewaren, vries dan in.</p><p>Dit plan kookt daarom nooit voor een hele week vooruit. Soep, curry of chili dubbel koken en de tweede portie een dag later eten kan wel. Voor meer dan twee dagen: invriezen en één keer opwarmen.</p><p><b>Kritisch:</b> ik vond geen aparte bewaartijd voor gekookte linzen of bonen; ik ga uit van dezelfde twee dagen. Controleer dit op de bewaarwijzer van het Voedingscentrum.</p>`},
+  carbs:{t:'Koolhydraten per trainingsdag',s:'Eten afgestemd op het werk van die dag',b:`<p>Koolhydraten zijn de brandstof voor intensieve en lange inspanning. De aanbeveling is daarom geen vast getal, maar schaalt mee met je training (<b>periodiseren</b> = afstemmen per dag): ongeveer 3–5 g per kg lichaamsgewicht op een rustige dag, 5–7 g bij een uur matige training, 6–10 g bij één tot drie uur duurtraining.</p><p>Deze app gebruikt 4 g/kg op rustdagen, 5 op rustige dagen, 7 op zware dagen en 8 op dagen met een lange duurtraining. Het soort dag komt uit je schema in Tempo. De porties worden daarop geschaald (tussen 0,8 en 1,5 keer).</p><p><b>Kritisch:</b> dit zijn bandbreedtes uit consensusdocumenten, geen individuele voorschriften. Honger, gewichtsverloop en hoe je trainingen voelen zijn betere graadmeters dan het getal. De koolhydraten in dit plan zijn zonder vezels geteld.</p><p class="ref">Burke et al. (2011) J Sports Sci · Thomas, Erdman & Burke (2016) Med Sci Sports Exerc · Impey et al. (2018) Sports Med</p>`},
+  protein:{t:'Eiwit bij plantaardig eten',s:'1,6 g per kg per dag',b:`<p>Duursporters hebben meer eiwit nodig dan de algemene norm: ongeveer 1,2–2,0 g per kg per dag. Plantaardig eiwit is gemiddeld iets minder goed verteerbaar en bevat minder leucine (=het aminozuur dat spieropbouw aanzet), daarom rekent de app met <b>1,6 g/kg</b> als doel, verdeeld over de maaltijden. Dat is een praktische keuze in de bovenkant van de gangbare bandbreedte, geen voorschrift.</p><p>Linzen, bonen, tofu en tempeh zijn de dragers. Op gewicht is droge linzen de goedkoopste eiwitbron, daarna sojaproducten en pindakaas.</p><p><b>Kritisch:</b> of veganisten echt meer nodig hebben is niet goed gemeten; bij voldoende totale inname lijkt het verschil met dierlijk eiwit klein.</p><p class="ref">Thomas et al. (2016) Med Sci Sports Exerc · Rogerson (2017) J Int Soc Sports Nutr · Hevia-Larraín et al. (2021) Sports Med</p>`},
+  iron:{t:'IJzer en calcium',s:'Waar plantaardige sporters op letten',b:`<p><b>IJzer</b> uit planten (non-heem) wordt minder goed opgenomen dan ijzer uit vlees. Daarom toont de app een richtwaarde van 1,8 keer de gewone aanbeveling. Vitamine C bij de maaltijd (paprika, citroen, sinaasappelsap) verhoogt de opname; koffie en thee rond de maaltijd verlagen die. Duurlopers verliezen bovendien extra ijzer.</p><p><b>Calcium</b>: richtwaarde 1000 mg per dag. Verrijkte sojamelk en sojayoghurt, boerenkool en spinazie leveren het meest. Let op: de calcium in tofu verschilt per merk; ik reken voorzichtig.</p><p><b>Kritisch:</b> de factor 1,8 is een schatting uit één rapport en staat ter discussie. Of je ijzerstatus goed is weet je alleen uit bloedonderzoek (ferritine); slik geen ijzer zonder dat te laten meten.</p><p class="ref">Institute of Medicine (2001) Dietary Reference Intakes · Sim et al. (2019) Eur J Appl Physiol · Hurrell & Egli (2010) Am J Clin Nutr</p>`},
   load:{t:'Koolhydraten stapelen',s:'De laatste twee dagen voor een wedstrijd',b:`<p>Voor wedstrijden langer dan 90 minuten vult <b>stapelen</b> (=carboloading) je glycogeenvoorraad (=opgeslagen koolhydraten in spieren en lever): 10–12 g per kg per dag in de laatste 36–48 uur, met weinig training.</p><p>De app schakelt de twee dagen voor je wedstrijddatum in Tempo automatisch over op vezelarme, koolhydraatrijke gerechten en een extra tussendoortje. Zo veel eten uit vaste maaltijden is lastig; sap, sportdrank en witte rijst of pasta helpen.</p><p><b>Kritisch:</b> je wordt er 1–2 kg zwaarder van (water dat met glycogeen wordt opgeslagen); dat hoort erbij. Oefen dit vóór een lange duurloop, nooit voor het eerst voor de wedstrijd.</p><p class="ref">Burke et al. (2011) J Sports Sci · Hawley et al. (1997) Sports Med · Jeukendrup (2011) J Sports Sci</p>`},
-  supp:{t:'Dagelijks aanvullen',s:'B12, vitamine D en omega-3',b:`<p><b>Vitamine B12</b> zit niet betrouwbaar in plantaardig eten; aanvullen is bij een volledig plantaardig voedingspatroon noodzakelijk.</p><p><b>Vitamine D</b> maak je in de zomer aan via zonlicht; in de wintermaanden is aanvullen op onze breedtegraad gangbaar advies.</p><p><b>Omega-3</b>: planten leveren ALA (lijnzaad, chia, walnoten), dat maar beperkt wordt omgezet in EPA en DHA. Algenolie levert die twee rechtstreeks.</p><p><b>Kritisch:</b> voor B12 is het bewijs hard; voor extra EPA/DHA bij gezonde volwassenen is het nut minder duidelijk. Doseringen horen bij een arts of diëtist, niet bij een app.</p><p class="ref">Pawlak et al. (2013) Nutr Rev · Gezondheidsraad (2012) Evaluatie voedingsnormen vitamine D · Lane et al. (2014) Crit Rev Food Sci Nutr</p>`}
+  supp:{t:'Dagelijks aanvullen',s:'B12, vitamine D en omega-3',b:`<p><b>Vitamine B12</b> zit niet betrouwbaar in plantaardig eten; aanvullen is bij een volledig plantaardig voedingspatroon noodzakelijk.</p><p><b>Vitamine D</b> maak je in de zomer aan via zonlicht; in de wintermaanden is aanvullen op onze breedtegraad gangbaar advies.</p><p><b>Omega-3</b>: planten leveren ALA (lijnzaad), dat maar beperkt wordt omgezet in EPA en DHA. Algenolie levert die twee rechtstreeks.</p><p><b>Kritisch:</b> voor B12 is het bewijs hard; voor extra EPA/DHA bij gezonde volwassenen is het nut minder duidelijk. Doseringen horen bij een arts of diëtist, niet bij een app.</p><p class="ref">Pawlak et al. (2013) Nutr Rev · Gezondheidsraad (2012) Evaluatie voedingsnormen vitamine D · Lane et al. (2014) Crit Rev Food Sci Nutr</p>`}
 };
 
 /* ---------- feed ---------- */
-function publish(){const d=day(today()),items=shopping(),left=items.filter(i=>!st.bought[i.nm]);
+function publish(){const S=shopping(),d=dayCalc(today(),st.plan[today()]),left=S.items.filter(i=>!st.bought[i.nm]);
   K.feed.set('eten',{today:{cls:d.c,label:CLS[d.c].l,target:Math.round(d.target),kh:Math.round(d.tot.kh),ei:Math.round(d.tot.ei),
       meals:Object.entries(d.p).map(([s,id])=>({slot:MEAL[s],n:R(id).n}))},
-    list:{n:items.length,left:left.length,cost:Math.round(items.reduce((x,i)=>x+i.eur,0))}})}
+    list:{n:S.items.length,left:left.length,cost:Math.round(S.kassa),use:Math.round(S.use),budget:st.budget}})}
 
 function render(){renderHome();renderWeek();renderShop();renderRec()}
 K.info(INFO);

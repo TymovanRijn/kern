@@ -143,7 +143,7 @@ export function sheet({ title, body, onMount }) {
 
   requestAnimationFrame(() => requestAnimationFrame(() => { scrim.classList.add('open'); el.classList.add('open'); }));
 
-  let closed = false;
+  let closed = false, cleanup = () => {};
   const close = () => {
     if (closed) return;
     closed = true;
@@ -151,7 +151,7 @@ export function sheet({ title, body, onMount }) {
     el.classList.remove('open');
     el.style.transform = '';
     setTimeout(() => {
-      scrim.remove(); el.remove();
+      cleanup(); scrim.remove(); el.remove();
       if (!host.children.length) document.body.style.overflow = '';
     }, 380);
   };
@@ -159,22 +159,49 @@ export function sheet({ title, body, onMount }) {
   scrim.onclick = close;
   el.querySelector('[data-close]').onclick = close;
 
-  // Drag down to dismiss (on the grabber/header)
-  let startY = null, dy = 0;
-  const handles = [el.querySelector('.grab'), el.querySelector('.sheet-head')];
-  handles.forEach((hnd) => {
-    hnd.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; dy = 0; el.classList.add('dragging'); }, { passive: true });
-    hnd.addEventListener('touchmove', (e) => {
-      if (startY == null) return;
-      dy = Math.max(0, e.touches[0].clientY - startY);
-      el.style.transform = `translateY(${dy}px)`;
-    }, { passive: true });
-    hnd.addEventListener('touchend', () => {
-      el.classList.remove('dragging');
-      if (dy > 110) close(); else el.style.transform = '';
-      startY = null;
-    });
-  });
+  // Naar beneden vegen sluit het scherm; de pagina erachter beweegt nooit mee.
+  // Scrollen binnen het scherm blijft werken; de kop en het greepje slepen altijd.
+  const scroller = el.querySelector('.sheet-body');
+  let y0 = 0, lastY = 0, lastT = 0, v = 0, drag = false, dragY0 = 0;
+  const top = () => host.lastElementChild === el;
+  const onStart = (e) => { if (closed || !top()) return; y0 = lastY = e.touches[0].clientY; lastT = e.timeStamp; v = 0; drag = false; };
+  const onMove = (e) => {
+    if (closed || !top()) return;
+    const y = e.touches[0].clientY, d = y - lastY, dt = e.timeStamp - lastT;
+    lastY = y; lastT = e.timeStamp; if (dt > 0) v = d / dt;
+    if (!el.contains(e.target)) { e.preventDefault(); if (y - y0 > 40) close(); return; }
+    if (drag) {
+      e.preventDefault();
+      const off = Math.max(0, y - dragY0);
+      el.style.transform = `translateY(${off}px)`;
+      scrim.style.opacity = String(Math.max(0, 1 - off / el.offsetHeight));
+      return;
+    }
+    const inHead = !!e.target.closest('.grab, .sheet-head');
+    const atTop = inHead || scroller.scrollTop <= 0;
+    const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+    if (d > 0 && atTop) { drag = true; dragY0 = y - d; el.classList.add('dragging'); scrim.style.transition = 'none'; e.preventDefault(); return; }
+    if (d > 0) return;
+    if (d < 0 && !atBottom && !inHead) return;
+    e.preventDefault();
+  };
+  const onEnd = () => {
+    if (!drag) return;
+    drag = false;
+    const off = parseFloat((el.style.transform.match(/-?[\d.]+/) || [0])[0]) || 0;
+    el.classList.remove('dragging'); scrim.style.transition = ''; scrim.style.opacity = '';
+    if (off > 110 || v > .6) close(); else el.style.transform = '';
+  };
+  document.addEventListener('touchstart', onStart, { passive: true });
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onEnd);
+  document.addEventListener('touchcancel', onEnd);
+  cleanup = () => {
+    document.removeEventListener('touchstart', onStart);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onEnd);
+    document.removeEventListener('touchcancel', onEnd);
+  };
 
   onMount?.(el, close);
   return { el, close };

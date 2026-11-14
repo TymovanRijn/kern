@@ -40,8 +40,33 @@ const profile=()=>load(PROFILE_KEY,{weight:70});
 const saveProfile=p=>save(PROFILE_KEY,p);
 
 /* ---------- sheet / toast ---------- */
-function openSheet(h){$('#sheet-body').innerHTML=h;$('#sheet').scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on')}
-function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on')}
+function openSheet(h){$('#sheet-body').innerHTML=h;$('#sheet').scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');document.documentElement.classList.add('sheet-open')}
+function closeSheet(){const sh=$('#sheet');sh.classList.remove('on','dragging');$('#scrim').classList.remove('on','dragging');sh.style.transform='';$('#scrim').style.opacity='';document.documentElement.classList.remove('sheet-open')}
+
+/* Scherm vegen: een open scherm beweegt mee met je vinger en sluit als je naar beneden veegt.
+   De pagina erachter scrolt nooit mee. Scrollen binnen het scherm blijft gewoon werken. */
+function sheetGestures(){
+  const sh=$('#sheet'),sc=$('#scrim');
+  let y0=0,lastY=0,lastT=0,v=0,drag=false,dragY0=0;
+  const isOpen=()=>sh.classList.contains('on');
+  document.addEventListener('touchstart',e=>{if(!isOpen())return;const t=e.touches[0];y0=lastY=t.clientY;lastT=e.timeStamp;v=0;drag=false},{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!isOpen())return;
+    const y=e.touches[0].clientY,d=y-lastY,dt=e.timeStamp-lastT;lastY=y;lastT=e.timeStamp;if(dt>0)v=d/dt;
+    if(!sh.contains(e.target)){e.preventDefault();if(y-y0>40)closeSheet();return}     // buiten het scherm: pagina blijft staan
+    if(drag){e.preventDefault();const off=Math.max(0,y-dragY0);sh.style.transform=`translateY(${off}px)`;sc.style.opacity=String(Math.max(0,1-off/sh.offsetHeight));return}
+    const atTop=sh.scrollTop<=0,atBottom=sh.scrollTop+sh.clientHeight>=sh.scrollHeight-1;
+    if(d>0&&atTop){drag=true;dragY0=y-d;sh.classList.add('dragging');sc.classList.add('dragging');e.preventDefault();return}  // naar beneden vegen bovenaan: sleep mee
+    if(d>0)return;                      // omhoog scrollen in het scherm
+    if(d<0&&!atBottom)return;           // omlaag scrollen in het scherm
+    e.preventDefault();                 // einde van de inhoud: niet doorgeven aan de pagina
+  },{passive:false});
+  const end=()=>{if(!drag)return;drag=false;
+    const off=parseFloat((sh.style.transform.match(/-?[\d.]+/)||[0])[0])||0;
+    sh.classList.remove('dragging');sc.classList.remove('dragging');sh.style.transform='';sc.style.opacity='';
+    if(off>110||v>.6)closeSheet()};
+  document.addEventListener('touchend',end);document.addEventListener('touchcancel',end);
+}
 let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1900)}
 
 function ringSVG(pct,color,size=76){const r=size/2-3,c=2*Math.PI*r;
@@ -58,6 +83,7 @@ const GRID='<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" 
 function chrome(app){
   if(!$('#sheet'))document.body.insertAdjacentHTML('beforeend','<div class="scrim" id="scrim"></div><div class="sheet" id="sheet"><div class="grab"></div><div id="sheet-body"></div></div><div class="toast" id="toast"></div>');
   $('#scrim').onclick=closeSheet;
+  if(!window.__sheetG){window.__sheetG=1;sheetGestures()}
   addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
   if(app!=='hub')$$('.top').forEach(t=>t.insertAdjacentHTML('afterbegin',`<a class="hub" href="${ROOT}" aria-label="Terug naar Kern">${GRID}<span>Kern</span></a>`));
   if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register(ROOT+'sw.js',{scope:ROOT}).catch(()=>{});
