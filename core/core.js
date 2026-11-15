@@ -40,7 +40,7 @@ const profile=()=>load(PROFILE_KEY,{weight:70});
 const saveProfile=p=>save(PROFILE_KEY,p);
 /* ---------- ochtendmeting: vast ademtempo en overzetcode (gedeeld door Vandaag en Hart) ---------- */
 const PACES=[0,6,8,10];                                   // 0 = eigen tempo, anders ademhalingen per minuut
-const pace=()=>{const v=profile().pace;return PACES.includes(v)?v:6};
+const pace=()=>{const v=profile().pace;return PACES.includes(v)?v:0};
 const setPace=v=>{const p=profile();p.pace=v;saveProfile(p)};
 const paceLabel=v=>v?`${v} per minuut`:'eigen tempo';
 const hrvCode=(k,hrv,rhr,pc)=>`KERN-HRV;${k};${hrv};${rhr};${pc}`;
