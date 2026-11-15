@@ -74,7 +74,7 @@ function demoSource(h,opt={}){
   const ecgAt=t=>{let v=0;for(let i=beats.length-1;i>=0&&i>=beats.length-4;i--){const d=t-beats[i].t;if(d<-.4||d>.6)continue;for(const[c,a,w]of W){const x=(d-c)/w;v+=a*Math.exp(-.5*x*x)}}
     return v+60*Math.sin(2*Math.PI*.3*t)+gauss()*18};
   const step=()=>{const now=performance.now();if(last==null)last=now;simT+=Math.min(.5,(now-last)/1000);last=now;
-    while(tBeat<simT+.8){ar=ar*.95+gauss()*12;const rr=base+20*Math.sin(2*Math.PI*.25*tBeat)+20*Math.sin(2*Math.PI*.095*tBeat)+ar+gauss()*4+(opt.drift?-opt.drift*tBeat:0);  // ar = trage, gecorreleerde schommeling zoals bij een echt hart
+    while(tBeat<simT+.8){ar=ar*.95+gauss()*12;const rr=base+(opt.rsa?opt.rsa(tBeat):20*Math.sin(2*Math.PI*.25*tBeat))+20*Math.sin(2*Math.PI*.095*tBeat)+ar+gauss()*4+(opt.drift?-opt.drift*tBeat:0);  // ar = trage, gecorreleerde schommeling zoals bij een echt hart
       tBeat+=rr/1000;beats.push({t:tBeat,rr});if(beats.length>12)beats.shift();pend.push({t:tBeat,rr})}
     while(pend.length&&pend[0].t<=simT){const p=pend.shift();if(rnd()<.004&&rrOut.length)rrOut[rrOut.length-1]+=p.rr;else rrOut.push(p.rr)}  // af en toe een gemiste slag
     const target=Math.floor(simT*ECG_FS);
