@@ -38,6 +38,15 @@ const feed={
 const PROFILE_KEY='kern.profile.v1';
 const profile=()=>load(PROFILE_KEY,{weight:70});
 const saveProfile=p=>save(PROFILE_KEY,p);
+/* ---------- ochtendmeting: vast ademtempo en overzetcode (gedeeld door Vandaag en Hart) ---------- */
+const PACES=[0,6,8,10];                                   // 0 = eigen tempo, anders ademhalingen per minuut
+const pace=()=>{const v=profile().pace;return PACES.includes(v)?v:6};
+const setPace=v=>{const p=profile();p.pace=v;saveProfile(p)};
+const paceLabel=v=>v?`${v} per minuut`:'eigen tempo';
+const hrvCode=(k,hrv,rhr,pc)=>`KERN-HRV;${k};${hrv};${rhr};${pc}`;
+function parseHrvCode(t){const m=String(t).trim().match(/^KERN-HRV;(\d{4}-\d{2}-\d{2});(\d{1,3});(\d{2,3})(?:;(\d{1,2}))?$/);
+  if(!m||isNaN(new Date(m[1]+'T00:00')))return null;const hrv=+m[2],rhr=+m[3],pc=m[4]==null?null:+m[4];
+  return hrv>=5&&hrv<=300&&rhr>=25&&rhr<=130&&(pc==null||PACES.includes(pc))?{k:m[1],hrv,rhr,pace:pc}:null}
 
 /* ---------- sheet / toast ---------- */
 function openSheet(h){$('#sheet-body').innerHTML=h;$('#sheet').scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');document.documentElement.classList.add('sheet-open')}
@@ -112,6 +121,6 @@ function importAll(text){
   return n}
 function wipeAll(){const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('kern.'))ks.push(k)}ks.forEach(k=>localStorage.removeItem(k))}
 
-window.K={ROOT,DAY,$,$$,esc,dkey,today0,addDays,pd,DOW,nl,eur,fmtDate,relDay,uid,mean,sd,rng,load,save,feed,profile,saveProfile,
+window.K={PACES,pace,setPace,paceLabel,hrvCode,parseHrvCode,ROOT,DAY,$,$$,esc,dkey,today0,addDays,pd,DOW,nl,eur,fmtDate,relDay,uid,mean,sd,rng,load,save,feed,profile,saveProfile,
   openSheet,closeSheet,toast,ringSVG,info,tabs,segmented,chrome,exportAll,importAll,wipeAll};
 })();

@@ -58,6 +58,7 @@ canvas.cv.breath{height:190px}
 
   <div class="card">
     <div class="segmented" id="mode" style="margin-bottom:12px;background:var(--card-2)"><button class="on" data-v="vrij">Vrij meten</button><button data-v="ochtend">Ochtendmeting</button></div>
+    <div id="pace-row"></div>
     <div class="ctrl" id="ctrl"></div>
     <div id="morning"></div>
     <div class="hint" id="mode-hint"></div>
@@ -203,34 +204,45 @@ async function stopRec(silent){const r=S.rec;S.rec=null;renderCtrl();if(!r)retur
   st.recs.unshift(meta);save();renderRecs();if(!silent)toast('Opname bewaard');return meta}
 
 /* ---------- ochtendmeting ---------- */
-function startMorning(){if(!S.src)return;S.morning={t0:now(),beats:[],f:new H.RRFilter(),done:false};startRec('ochtend');renderMorning()}
+function startMorning(){if(!S.src)return;const pc=K.pace();
+  S.morning={t0:now(),beats:[],f:new H.RRFilter(),done:false,pace:pc};
+  S.pacer=pc;S.pacerT0=now();$$('#pacer button').forEach(b=>b.classList.toggle('on',+b.dataset.v===pc));
+  startRec('ochtend');renderCtrl();renderMorning()}
 async function finishMorning(){const m=S.morning;m.done=true;const meta=await stopRec(true);
   const s=H.stats(m.beats),hrv=Math.round(s.rmssd),rhr=Math.round(s.hr);
   if(s.cnt<50||s.pairs<40){m.result={fail:`Te weinig geldige hartslagen (${s.cnt}). Maak de elektroden nat, span de band en probeer opnieuw.`};renderMorning();return}
-  m.result={hrv,rhr,cnt:s.cnt,art:s.art,code:`KERN-HRV;${dkey(new Date())};${hrv};${rhr}`};
-  if(meta){meta.hrv=hrv;meta.rhr=rhr;save()}
+  m.result={hrv,rhr,cnt:s.cnt,art:s.art,pace:m.pace,code:K.hrvCode(dkey(new Date()),hrv,rhr,m.pace)};
+  if(meta){meta.hrv=hrv;meta.rhr=rhr;meta.pace=m.pace;save()}
   renderMorning()}
-function saveToCheck(hrv,rhr,k=dkey(new Date())){try{const ck=JSON.parse(localStorage.getItem('kern.check.v1'))||{days:{}};ck.days=ck.days||{};
-  ck.days[k]={...(ck.days[k]||{}),hrv,rhr};delete ck.days[k].demo;localStorage.setItem('kern.check.v1',JSON.stringify(ck));toast('Opgeslagen in je ochtendcheck')}catch(e){toast('Opslaan mislukt')}}
+function saveToCheck(hrv,rhr,k=dkey(new Date()),pc=K.pace()){try{const ck=JSON.parse(localStorage.getItem('kern.check.v1'))||{days:{}};ck.days=ck.days||{};
+  ck.days[k]={...(ck.days[k]||{}),hrv,rhr,pace:pc};delete ck.days[k].demo;localStorage.setItem('kern.check.v1',JSON.stringify(ck));toast('Opgeslagen in je ochtendcheck')}catch(e){toast('Opslaan mislukt')}}
 function renderMorning(){const el=$('#morning'),m=S.morning;
   if(!m){el.innerHTML='';return}
   if(m.result){const r=m.result;
     if(r.fail){el.innerHTML=`<div class="banner" style="--d:var(--c-warn);background:var(--card-2);margin:14px 0 0"><span class="bar"></span><div>${esc(r.fail)}</div></div>`;return}
     const q=r.art<.03?['goed','var(--c-peak)']:r.art<.08?['redelijk','var(--c-mid)']:['slecht','var(--c-warn)'];
     el.innerHTML=`<div class="k3"><div class="stat"><div class="v num">${r.hrv}</div><div class="k">HRV (rMSSD, ms)</div></div><div class="stat"><div class="v num">${r.rhr}</div><div class="k">rusthartslag</div></div><div class="stat"><div class="v" style="color:${q[1]};font-size:18px">${q[0]}</div><div class="k">${nl(r.art*100,1)}% afgekeurd</div></div></div>
-      <div class="ctrl" style="margin-top:12px"><button class="btn pri" id="m-save">Opslaan in ochtendcheck</button><button class="btn" id="m-copy">Kopieer code</button></div>
+      <div class="hint">Gemeten met ademtempo: ${K.paceLabel(r.pace)}.</div>
+      <div class="ctrl" style="margin-top:12px"><button class="btn pri" id="m-save">Opslaan en verder met de check</button><button class="btn" id="m-copy">Kopieer code</button></div>
       <div class="hint" style="word-break:break-all">${esc(r.code)} · plak deze code in de ochtendcheck op een ander toestel</div>`;
-    $('#m-save').onclick=()=>saveToCheck(r.hrv,r.rhr);
+    $('#m-save').onclick=()=>{saveToCheck(r.hrv,r.rhr,dkey(new Date()),r.pace);setTimeout(()=>{location.href='../?check=1'},500)};
     $('#m-copy').onclick=async()=>{try{await navigator.clipboard.writeText(r.code);toast('Code gekopieerd')}catch(e){toast('Selecteer en kopieer de code hieronder')}};return}
   const el2=now()-m.t0,p=Math.min(1,el2/(SETTLE+SPAN));
-  el.innerHTML=`<div class="prog"><i style="flex:${Math.max(.001,p)};background:var(--c-peak)"></i><i style="flex:${Math.max(.001,1-p)};background:var(--card-2)"></i></div>
-    <div class="hint" style="margin-top:4px">${el2<SETTLE?`Stabiliseren… nog ${Math.ceil(SETTLE-el2)} s`:`Meten… nog ${Math.max(0,Math.ceil(SETTLE+SPAN-el2))} s · ${m.beats.length} slagen`}. Lig stil, adem rustig, niet praten.</div>`;
+  el.innerHTML=`${m.pace?`<div class="pacer-bar" style="height:28px;border-radius:14px;margin-top:16px"><i id="m-pacer-fill" style="border-radius:14px"></i></div><div id="m-pacer-txt" style="font-size:22px;font-weight:700;margin:10px 0 4px">&nbsp;</div>`:''}
+    <div class="prog"><i style="flex:${Math.max(.001,p)};background:var(--c-peak)"></i><i style="flex:${Math.max(.001,1-p)};background:var(--card-2)"></i></div>
+    <div class="hint" style="margin-top:4px">${el2<SETTLE?`Stabiliseren… nog ${Math.ceil(SETTLE-el2)} s`:`Meten… nog ${Math.max(0,Math.ceil(SETTLE+SPAN-el2))} s · ${m.beats.length} slagen`}. Lig stil en praat niet. ${m.pace?`Volg de balk: ${K.paceLabel(m.pace)}.`:'Adem in je eigen, rustige tempo.'}</div>`;drawPacer();
   if(el2>=SETTLE+SPAN)finishMorning()}
 
 /* ---------- bediening ---------- */
 const MODE_HINT={vrij:'Kijk live mee, ook tijdens een training. DFA α1 is vooral zinvol tijdens inspanning op de fiets of loopband. Druk op Opnemen om een meting met ECG te bewaren.',
-  ochtend:'Twee minuten liggend, direct na het wakker worden: 20 seconden stabiliseren en 100 seconden meten, precies zoals de check op Vandaag. Het ECG wordt meebewaard.'};
-function renderCtrl(){const c=$('#ctrl');$('#dot').classList.toggle('on',!!S.src);$('#mode-hint').textContent=MODE_HINT[S.mode];
+  ochtend:'Twee minuten liggend, direct na het wakker worden: 20 seconden stabiliseren en 100 seconden meten, met elke ochtend hetzelfde ademtempo. Daarna ga je verder met de check op Vandaag. Het ECG wordt meebewaard.'};
+function renderPace(){const el=$('#pace-row');if(!el)return;
+  if(S.mode!=='ochtend'||(S.morning&&!S.morning.result)){el.innerHTML='';return}
+  const cur=K.pace();
+  el.innerHTML=`<div class="field col" style="border:0;padding:4px 0 10px"><label>Ademtempo ochtendmeting <button class="info" data-info="pace" style="padding:0 0 0 6px">?</button></label>
+    <div class="segmented" id="pace-seg" style="background:var(--card-2);margin:6px 0 0">${K.PACES.map(v=>`<button data-v="${v}" class="${v===cur?'on':''}">${v?v+' /min':'Eigen'}</button>`).join('')}</div></div>`;
+  K.segmented($('#pace-seg'),v=>{if(+v===K.pace())return;if(!confirm(`Ademtempo veranderen naar ${K.paceLabel(+v)}? Je herstelgrafiek vergelijkt alleen metingen met hetzelfde tempo, dus je bouwt een nieuwe basislijn op.`)){renderPace();return}K.setPace(+v);toast('Ademtempo: '+K.paceLabel(+v))})}
+function renderCtrl(){const c=$('#ctrl');$('#dot').classList.toggle('on',!!S.src);$('#mode-hint').textContent=MODE_HINT[S.mode];renderPace();
   if(S.busy){c.innerHTML='<button class="btn" disabled>Bezig…</button>';return}
   if(!S.src){c.innerHTML=`<button class="btn pri" id="b-con">Verbind Polar H10</button><button class="btn" id="b-demo">Proefsignaal</button>`;
     $('#b-con').onclick=()=>connect('polar');$('#b-demo').onclick=()=>connect('demo');return}
@@ -328,11 +340,11 @@ function drawSpectrum(id,sp){const {x,w,h}=cv(id);if(!sp){axisText(x,'Na 3 minut
 /* ---------- ademhaling per slag ---------- */
 const BREATH_WIN=60,INH=.4;   // gids: 40% inademen, 60% uitademen
 function pacerPhase(t){const per=60/S.pacer,ph=(((t-S.pacerT0)%per)+per)%per/per;return{per,ph,inh:ph<INH}}
-function drawPacer(){const fill=$('#pacer-fill'),txt=$('#pacer-txt');
+function drawPacer(){const fill=$('#pacer-fill'),txt=$('#pacer-txt'),mf=$('#m-pacer-fill'),mt=$('#m-pacer-txt');
   if(!S.pacer){fill.style.width='0';txt.textContent='Ademgids uit';return}
   const {per,ph,inh}=pacerPhase(now()),e=x=>.5-.5*Math.cos(Math.PI*x),v=inh?e(ph/INH):1-e((ph-INH)/(1-INH));
-  fill.style.width=(v*100).toFixed(1)+'%';
-  const left=inh?(INH-ph)*per:(1-ph)*per;txt.textContent=`${inh?'Adem in':'Adem uit'} · ${Math.ceil(left)} s`}
+  const left=inh?(INH-ph)*per:(1-ph)*per,lbl=`${inh?'Adem in':'Adem uit'} · ${Math.ceil(left)} s`;
+  for(const[f,tx]of[[fill,txt],[mf,mt]])if(f){f.style.width=(v*100).toFixed(1)+'%';tx.textContent=lbl}}
 function drawBreath(){const {x,w,h}=cv('#cv-br'),t=now(),t0=t-BREATH_WIN,L=34,B=16,T=8,pts=S.inst.filter(p=>p[0]>=t0-2);
   const X=v=>L+(v-t0)/BREATH_WIN*(w-L-4);
   if(S.pacer){const per=60/S.pacer;let k=Math.floor((t0-S.pacerT0)/per)-1;x.fillStyle='rgba(90,200,250,.13)';
@@ -385,7 +397,7 @@ async function recSheet(id){const m=st.recs.find(r=>r.id===id);if(!m)return;
     <button class="btn danger" id="r-del">Verwijderen</button>`);
   let t=0;line('#r-rr',beats.map(b=>(t+=b.rr/1000,[t,b.rr,b.ok?1:0])),{dots:true});
   const pcPts=x.slice(-240);drawPoincare('#r-pc',pcPts,H.poincare(pcPts),null);
-  const rc=$('#r-check');if(rc)rc.onclick=()=>saveToCheck(m.hrv,m.rhr,dkey(m.date));
+  const rc=$('#r-check');if(rc)rc.onclick=()=>saveToCheck(m.hrv,m.rhr,dkey(m.date),m.pace??0);
   $('#r-csv').onclick=()=>{let tt=0;download(`hart-rr-${m.date.slice(0,10)}.csv`,'tijd_s;rr_ms;geldig\n'+m.beats.map(b=>(tt+=b.rr/1000,`${tt.toFixed(3)};${b.rr};${b.ok}`)).join('\n'))};
   $('#r-del').onclick=async()=>{if(!confirm('Deze opname verwijderen?'))return;st.recs=st.recs.filter(r=>r.id!==id);await idb.del(id);save();closeSheet();renderRecs()};
   if(m.hasEcg){let buf;try{buf=await idb.get(id)}catch(e){}
@@ -409,6 +421,7 @@ const INFO={
   ecg:{t:'Het ECG van een borstband',s:'Wat je ziet en wat niet',b:`<p>De Polar H10 meet de elektrische activiteit van je hart via twee elektroden op je borst en stuurt die 130 keer per seconde door, in microvolt. Je ziet daardoor de vorm van elke hartslag: de kleine P-golf, de scherpe QRS-piek en de bredere T-golf.</p><p>Voor de weergave wordt langzaam zwerven van de basislijn (door ademhaling en beweging) weggefilterd. Opgeslagen opnames bevatten het ruwe signaal. De oranje stip markeert een herkende piek; die herkenning is eenvoudig en alleen bedoeld voor het beeld. De HRV-getallen komen uit de slagtijden die de band zelf meet, tot op de milliseconde.</p><p><b>Kritisch:</b> dit is één afleiding met 130 metingen per seconde, waar een ziekenhuis-ECG twaalf afleidingen en meestal 500 of meer per seconde gebruikt. Vormdetails zijn daardoor grof, en bewegen, droge elektroden en spierspanning geven storing die op een afwijking kan lijken. De band is een sportsensor, geen medisch hulpmiddel. Gebruik dit nooit om zelf iets vast te stellen of gerust te stellen: bij hartkloppingen, pijn op de borst, flauwvallen of benauwdheid ga je naar een arts.</p>`},
   hrv:{t:'HRV: rMSSD, SDNN en pNN50',s:'Variatie tussen slagen',b:`<p><b>rMSSD</b> is de wortel van het gemiddelde gekwadrateerde verschil tussen opeenvolgende slagen. Het volgt vooral de rem op je hart via de nervus vagus (=de rust-en-herstelkant van je zenuwstelsel) en is de standaardmaat voor dagelijkse HRV.</p><p><b>SDNN</b> is de spreiding van alle slagen samen; die reageert ook op tragere schommelingen. <b>pNN50</b> is het percentage opeenvolgende slagen dat meer dan 50 ms verschilt.</p><p>De live waarden gaan over de laatste 60 seconden. Slagen die onmogelijk zijn of meer dan 20% afwijken van de vorige worden afgekeurd en tellen niet mee.</p><p><b>Kritisch:</b> live HRV schommelt sterk met je ademhaling, houding en praten. Vergelijk alleen metingen die op dezelfde manier zijn gedaan, zoals de ochtendmeting. Tijdens inspanning daalt rMSSD naar een paar milliseconden en zegt dan weinig meer.</p><p class="ref">Task Force ESC/NASPE (1996) Circulation · Shaffer & Ginsberg (2017) Front Public Health · Plews et al. (2013) Sports Med</p>`},
   dfa:{t:'DFA α1 en je aerobe drempel',s:'Het patroon in je hartslag tijdens inspanning',b:`<p>DFA α1 (=detrended fluctuation analysis, korte termijn) meet of de schommelingen in je hartslag een herkenbaar patroon hebben (rond 1) of willekeurig worden (rond 0,5). Hoe zwaarder de inspanning, hoe lager de waarde.</p><ul><li><b>Boven 0,75:</b> onder je aerobe drempel, rustige duurtraining</li><li><b>0,75 tot 0,5:</b> tussen aerobe en anaerobe drempel</li><li><b>Onder 0,5:</b> boven je anaerobe drempel</li></ul><p>Onderzoek van Rogers en Gronwald legt de grens van 0,75 bij de aerobe drempel, ook bij recreatieve sporters. De app rekent over de laatste 2 minuten slagen, met vensters van 4 tot 16 slagen, en vervangt afgekeurde slagen door de mediaan van hun buren.</p><p><b>Kritisch:</b> dit werkt alleen tijdens inspanning met een geleidelijk stijgende belasting, bij weinig storing (liefst onder 3% afgekeurd) en met een borstband. In rust ligt de waarde meestal rond 1 tot 1,5 en zegt dan niets over drempels. Tijdens hardlopen geeft een borstband vaker storing dan op de fiets. Het venster van 2 minuten komt uit de praktijk, niet uit vastgestelde normen. De validatie is gedaan bij kleine groepen; gebruik het als hulpmiddel naast een gewone inspanningstest, niet in plaats ervan.</p><p class="ref">Rogers et al. (2021) Front Physiol · Rogers & Gronwald (2022) Front Physiol · Gronwald et al. (2020) Front Physiol</p>`},
+  pace:{t:'Vast ademtempo bij de ochtendmeting',s:'Waarom elke ochtend hetzelfde',b:`<p>Je ademhaling bepaalt voor een groot deel hoe groot de schommeling tussen je hartslagen is. Langzaam en diep ademen maakt je HRV (rMSSD) duidelijk hoger dan snel en oppervlakkig ademen. Als je elke ochtend anders ademt, meet je dus deels je ademhaling in plaats van je herstel.</p><p>Met een vast tempo is dat verschil weg: de balk geeft elke ochtend hetzelfde ritme aan (40% inademen, 60% uitademen). De app bewaart bij elke meting welk tempo je gebruikte, en de herstelgrafiek op Vandaag vergelijkt alleen metingen met hetzelfde tempo.</p><ul><li><b>6 per minuut:</b> rond je resonantie-ademhaling; de schommeling is dan het grootst en de waarden liggen hoger dan bij gewoon ademen.</li><li><b>8 of 10 per minuut:</b> dichter bij je normale rustademhaling.</li><li><b>Eigen tempo:</b> zonder gids, zoals de meeste HRV-apps het doen. Dat is het makkelijkst te vergelijken met normwaarden, maar wisselt meer van dag tot dag.</li></ul><p><b>Kritisch:</b> onderzoek is niet eenduidig over wat beter is. Een vast, langzaam tempo maakt de meting rustiger, maar kan ook een deel van het verschil verbergen dat je juist wilt zien, omdat je de schommeling zelf opwekt. De keuze is minder belangrijk dan dat je hem niet meer verandert. Kies er één en houd die vast.</p><p class="ref">Shaffer & Ginsberg (2017) Front Public Health · Laborde et al. (2017) Front Psychol · Plews et al. (2013) Sports Med</p>`},
   adem:{t:'Ademhaling per slag',s:'Hoe je hart meebeweegt met je adem',b:`<p>Als je inademt, remt je zenuwstelsel je hart even minder af en stijgt je hartslag. Als je uitademt, daalt hij weer. Dat heet <b>respiratoire sinusaritmie</b> (RSA) en het is een normaal en gezond verschijnsel. De grafiek toont de hartslag van elke afzonderlijke slag (60.000 gedeeld door de tijd tussen twee slagen), zonder middeling, zodat je elke ademhaling terugziet als een golf.</p><p><b>Op en neer</b> is het verschil tussen de hoogste en laagste hartslag binnen één ademhaling. Met de ademgids aan wordt dat per ademhaling berekend; anders over de laatste 10 seconden.</p><p><b>Ademgids:</b> adem in terwijl de balk groeit en uit terwijl hij krimpt. De blauwe banen in de grafiek zijn de momenten van inademen. Rond 5,5 tot 6 ademhalingen per minuut is de golf bij de meeste mensen het grootst; dat heet resonantie-ademhaling. Probeer de drie standen en kijk bij welke jouw golf het grootst is.</p><p><b>Hoe snel is het?</b> De Polar H10 stuurt de slagtijden één keer per seconde door. Een slag verschijnt daardoor 0 tot 1 seconde nadat hij plaatsvond. Het ECG loopt ongeveer een halve tot één seconde achter. Sneller kan niet met deze band. Je hart reageert zelf ook met een kleine vertraging: de hoogste hartslag valt meestal rond het einde van het inademen.</p><p><b>Kritisch:</b> adem niet te diep of te snel: dan ga je hyperventileren en word je duizelig. Resonantie-ademhaling verlaagt in studies vooral stress en verhoogt kortdurend HRV; voor sportprestaties is het bewijs wisselend. De schatting van wanneer een slag plaatsvond is teruggerekend vanaf het moment dat het bericht binnenkwam en kan een fractie van een seconde afwijken.</p><p class="ref">Lehrer & Gevirtz (2014) Front Psychol · Vaschillo et al. (2006) Appl Psychophysiol Biofeedback · Shaffer & Ginsberg (2017) Front Public Health</p>`},
   tacho:{t:'RR-intervallen',s:'Elke stip is één hartslag',b:`<p>De grafiek toont de tijd tussen opeenvolgende slagen over de laatste 5 minuten. In rust zie je de reeks golven met je ademhaling mee: bij inademen worden de intervallen korter (hartslag omhoog), bij uitademen langer. Dat heet respiratoire sinusaritmie en is een normaal, gezond teken.</p><p><b>Rood</b> zijn afgekeurde slagen: meestal storing door een losse band of droge elektroden, soms een extra slag. Eén losse rode stip is normaal; veel rode stippen betekenen dat de HRV-getallen niet betrouwbaar zijn.</p><p><b>Kritisch:</b> het filter kan ook echte extra slagen afkeuren. Wil je weten of je hart extra slagen maakt, laat dat beoordelen door een arts met een echt ECG.</p>`},
   poincare:{t:'Poincaré-plot',s:'Elke slag uitgezet tegen de volgende',b:`<p>Elke stip is een paar opeenvolgende slagen: het eerste interval op de horizontale as, het volgende op de verticale. De wolk ligt langs de diagonaal.</p><p><b>SD1</b> is de breedte van de wolk dwars op de diagonaal: snelle variatie van slag tot slag, wiskundig gelijk aan rMSSD gedeeld door √2. <b>SD2</b> is de lengte langs de diagonaal: tragere schommelingen. Een smalle, korte wolk betekent weinig variatie, bijvoorbeeld bij vermoeidheid of inspanning.</p><p><b>Kritisch:</b> SD1 voegt niets toe aan rMSSD; de plot is vooral handig om in één oogopslag storing te zien (losse stippen ver van de wolk).</p><p class="ref">Brennan et al. (2001) IEEE Trans Biomed Eng</p>`},

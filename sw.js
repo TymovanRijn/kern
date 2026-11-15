@@ -1,5 +1,5 @@
 // Kern service worker: app-shell netwerk-eerst met cache als terugval; externe API's nooit cachen.
-const CACHE='kern-v2';
+const CACHE='kern-v3';
 const SHELL=['./','index.html','manifest.json','core/core.css','core/core.js','icons/icon-180.png','icons/icon-192.png','icons/icon-512.png',
   'tempo/','kracht/','eten/','eten/recipes.js','geld/','hart/','hart/polar.js','amifo/'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>Promise.all(SHELL.map(u=>c.add(u).catch(()=>{})))));self.skipWaiting()});

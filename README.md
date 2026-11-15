@@ -6,7 +6,7 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
 
 | Onderdeel | Map | Wat het doet |
 |---|---|---|
-| Vandaag | `/` | Ochtendcheck (HRV, rusthartslag, slaap), herstelanalyse en één dagadvies. Met een Polar H10 en een browser met Web Bluetooth (zoals Bluefy) meet de app zelf je rMSSD en rusthartslag |
+| Vandaag | `/` | Ochtendcheck (HRV, rusthartslag, slaap, benen), herstelanalyse en één dagadvies. De meting met een band gebeurt in Hart; de herstelgrafiek vergelijkt alleen metingen met hetzelfde ademtempo |
 | Tempo | `tempo/` | Duurtraining: vorm, schema, prognose, optionele Strava-koppeling |
 | Kracht | `kracht/` | Krachtlog met routines, rusttimer en voortgang per oefening |
 | Eten | `eten/` | Plantaardig weekmenu (55 recepten met bereiding, alleen gasfornuis en airfryer) afgestemd op de training; kiest de goedkoopste week en rekent de boodschappen uit per verpakking |
