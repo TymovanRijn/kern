@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kern">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="../manifest.json">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="stylesheet" href="../core/core.css">
+<title>Hart</title>
+<style>
+.dash{display:grid;grid-template-columns:1fr;gap:var(--gap)}
+.dash .card{margin:0;min-width:0}
+canvas.cv{display:block;width:100%;height:140px;margin-top:10px}
+canvas.cv.ecg{height:170px}
+canvas.cv.sq{height:auto;aspect-ratio:1}
+.k3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.k3 .stat .v{font-size:22px}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px}
+.ctrl .btn{flex:1 1 160px;margin-top:0}
+.live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c-off);margin-right:8px;vertical-align:1px}
+.live-dot.on{background:var(--c-peak);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.prog{display:flex;gap:6px;height:10px;margin:14px 0 6px}.prog i{border-radius:5px;display:block}
+.zone{font-size:15px;color:var(--text-2);margin-top:6px;line-height:1.35}
+.ecgnav{display:flex;align-items:center;gap:10px;margin-top:8px}.ecgnav .btn{margin:0;flex:0 0 auto;padding:10px 16px}
+.ecgnav span{flex:1;text-align:center;color:var(--text-2);font-size:14px}
+@media (min-width:900px){
+  body{max-width:1180px}
+  .dash{grid-template-columns:repeat(3,1fr)}
+  .dash .wide{grid-column:1/-1}
+  .dash .two{grid-column:span 2}
+  canvas.cv.ecg{height:230px}
+  canvas.cv{height:170px}
+  h1{font-size:48px}
+}
+</style>
+</head>
+<body>
+
+<section class="view on" id="v-live">
+  <div class="top"></div>
+  <h1>Hart</h1>
+  <div class="sub"><span class="live-dot" id="dot"></span><span id="status">Niet verbonden</span></div>
+  <div id="nobt"></div>
+
+  <div class="card">
+    <div class="segmented" id="mode" style="margin-bottom:12px;background:var(--card-2)"><button class="on" data-v="vrij">Vrij meten</button><button data-v="ochtend">Ochtendmeting</button></div>
+    <div class="ctrl" id="ctrl"></div>
+    <div id="morning"></div>
+    <div class="hint" id="mode-hint"></div>
+  </div>
+
+  <div class="dash" id="dash">
+    <div class="card wide">
+      <div class="card-h"><h3>ECG</h3><span class="chip" id="ecg-chip">geen signaal</span></div>
+      <canvas class="cv ecg" id="cv-ecg"></canvas>
+      <div class="hint">Eén afleiding van een borstband: om te kijken, niet om iets vast te stellen. <button class="info" data-info="ecg" style="padding:0">Meer</button></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>Hartslag</h3><span class="chip" id="hr-chip"></span></div>
+      <div class="big num" id="hr">—<small>sl/min</small></div>
+      <canvas class="cv" id="cv-hr"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>HRV · laatste minuut</h3><button class="info" data-info="hrv">?</button></div>
+      <div class="big num" id="rmssd">—<small>ms rMSSD</small></div>
+      <div class="k3"><div class="stat"><div class="v num" id="sdnn">—</div><div class="k">SDNN ms</div></div><div class="stat"><div class="v num" id="pnn50">—</div><div class="k">pNN50 %</div></div><div class="stat"><div class="v num" id="art">—</div><div class="k">artefacten</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>DFA α1</h3><button class="info" data-info="dfa">?</button></div>
+      <div class="big num" id="dfa">—</div>
+      <div class="zone" id="dfa-zone">Na 2 minuten meten verschijnt hier je waarde.</div>
+      <canvas class="cv" id="cv-dfa"></canvas>
+    </div>
+    <div class="card two">
+      <div class="card-h"><h3>RR-intervallen · 5 minuten</h3><button class="info" data-info="tacho">?</button></div>
+      <canvas class="cv" id="cv-rr"></canvas>
+      <div class="legend" style="margin-top:10px"><span style="--d:var(--c-peak)">Geldige slag</span><span style="--d:var(--c-warn)">Afgekeurd</span></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>Poincaré · 2 minuten</h3><button class="info" data-info="poincare">?</button></div>
+      <canvas class="cv sq" id="cv-pc"></canvas>
+      <div class="legend" style="margin-top:10px" id="pc-legend"></div>
+    </div>
+    <div class="card wide">
+      <div class="card-h"><h3>Ritme · 3 minuten</h3><button class="info" data-info="spectrum">?</button></div>
+      <div class="k3" style="margin-top:6px"><div class="stat"><div class="v num" id="resp">—</div><div class="k">ademhaling /min (schatting)</div></div><div class="stat"><div class="v num" id="lfhf">—</div><div class="k">LF/HF</div></div><div class="stat"><div class="v num" id="sd12">—</div><div class="k">SD1 / SD2 ms</div></div></div>
+      <canvas class="cv" id="cv-sp"></canvas>
+    </div>
+  </div>
+  <div class="hint" style="text-align:center;margin-top:24px">Hart · onderdeel van Kern · alles wordt op dit toestel berekend</div>
+</section>
+
+<section class="view" id="v-rec">
+  <div class="top"></div>
+  <h1>Opnames</h1>
+  <div class="sub" id="rec-sub"></div>
+  <div class="list" id="rec-list"></div>
+  <div class="hint" id="rec-hint"></div>
+</section>
+
+<section class="view" id="v-info">
+  <div class="top"></div>
+  <h1>Uitleg</h1>
+  <div class="sub">Wat de getallen betekenen en waar de grenzen liggen</div>
+  <div class="list" id="science-list"></div>
+</section>
+
+<nav class="tabbar">
+  <button class="on" data-tab="live"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Live</button>
+  <button data-tab="rec"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.500" cy="6" r=".8"/><circle cx="3.500" cy="12" r=".8"/><circle cx="3.500" cy="18" r=".8"/></svg>Opnames</button>
+  <button data-tab="info"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.500v.5"/></svg>Uitleg</button>
+</nav>
+
+<script src="../core/core.js"></script>
+<script src="polar.js"></script>
+<script>
+/* =========================================================
+   Hart — live ECG, hartslag en HRV met een Polar H10.
+   Onderdeel van Kern. Ochtendmetingen gaan naar de ochtendcheck op Vandaag.
+   ========================================================= */
+K.chrome('hart');
+const {$,$$,esc,dkey,DAY,nl,toast,openSheet,closeSheet,ringSVG,relDay}=K;
+const KEY='kern.hart.v1';
+let st=K.load(KEY,{recs:[]});
+const save=()=>{K.save(KEY,st);publish()};
+const FS=H.ECG_FS;
+const C={peak:'#30c46a',good:'#7ccf6b',mid:'#f5a623',warn:'#f0634f',off:'#636366',t2:'#98989f',line:'#2c2c2e',grid:'#1f1f22',bg:'#1c1c1e'};
+const SETTLE=20,SPAN=100;   // ochtendmeting: zelfde opzet als de check op Vandaag, zodat de waarden vergelijkbaar zijn
+
+/* ---------- opslag van ruw ECG in IndexedDB (te groot voor localStorage) ---------- */
+const idb={db:null,
+  open(){return this.db?Promise.resolve(this.db):new Promise((res,rej)=>{const r=indexedDB.open('kern-hart',1);r.onupgradeneeded=()=>r.result.createObjectStore('ecg');r.onsuccess=()=>res(this.db=r.result);r.onerror=()=>rej(r.error)})},
+  async put(k,v){const d=await this.open();return new Promise((res,rej)=>{const t=d.transaction('ecg','readwrite');t.objectStore('ecg').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})},
+  async get(k){const d=await this.open();return new Promise((res,rej)=>{const r=d.transaction('ecg').objectStore('ecg').get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
+  async del(k){const d=await this.open();return new Promise(res=>{const t=d.transaction('ecg','readwrite');t.objectStore('ecg').delete(k);t.oncomplete=res;t.onerror=res})}};
+
+/* ---------- live toestand ---------- */
+const S={src:null,busy:false,hr:0,contact:true,battery:null,beatT:0,beats:[],filter:new H.RRFilter(),hrHist:[],dfaHist:[],
+  ring:new Float32Array(FS*6),mark:new Uint8Array(FS*6),pos:0,q:[],hp:{x:0,y:0},det:{thr:400,last:-1e9,n:0,prev:[0,0]},ecgLast:0,
+  rec:null,morning:null,mode:'vrij',wake:null,metrics:{}};
+const now=()=>performance.now()/1000;
+
+function setStatus(t){$('#status').textContent=t}
+function onHR(m){S.contact=m.contact;const t=now();if(Number.isFinite(m.hr)&&m.hr>0){S.hr=m.hr;S.hrHist.push([t,m.hr]);if(S.hrHist.length>900)S.hrHist.shift()}
+  for(const rr of m.rr){const ok=S.filter.push(rr);S.beatT+=rr/1000;const b={t:S.beatT,rr:Math.round(rr),ok};S.beats.push(b);
+    if(S.rec)S.rec.beats.push({rr:b.rr,ok:b.ok?1:0});
+    if(S.morning&&!S.morning.done){const el=t-S.morning.t0;if(el>=SETTLE&&el<=SETTLE+SPAN+1)S.morning.beats.push({rr:b.rr,ok:S.morning.f.push(rr)})}}
+  const cut=S.beatT-1800;while(S.beats.length&&S.beats[0].t<cut)S.beats.shift()}
+function onECG(samples){S.ecgLast=now();for(const v of samples)S.q.push(v);
+  if(S.rec&&S.rec.ecgN<FS*3600){for(const v of samples){if(S.rec.ecgN>=FS*3600)break;S.rec.ecg.push(Math.max(-32768,Math.min(32767,v)));S.rec.ecgN++}}}
+
+/* ---------- verbinden ---------- */
+async function connect(kind){if(S.busy||S.src)return;S.busy=true;renderCtrl();
+  const h={onHR,onECG,onStatus:setStatus,onBattery:b=>{S.battery=b},onDisconnect:()=>{const was=S.src;S.src=null;endLive();if(was){setStatus('Verbinding verbroken');toast('Verbinding met de band viel weg')}}};
+  try{S.src=kind==='demo'?H.demoSource(h):await H.connectPolar(h);reset();setStatus(S.src.name+(S.src.ecg?'':' · zonder ECG'));
+    try{S.wake=await navigator.wakeLock?.request('screen')}catch(e){}
+    if(S.mode==='ochtend')startMorning()}
+  catch(e){if(e.name!=='NotFoundError')toast(e.message||'Verbinden mislukt');setStatus('Niet verbonden')}
+  S.busy=false;renderCtrl()}
+async function disconnect(){const s=S.src;S.src=null;if(S.rec)await stopRec(true);endLive();if(s)await s.close();setStatus('Niet verbonden');renderCtrl()}
+function endLive(){S.morning=null;try{S.wake&&S.wake.release()}catch(e){}S.wake=null;renderCtrl();renderMorning()}
+function reset(){Object.assign(S,{beatT:0,beats:[],filter:new H.RRFilter(),hrHist:[],dfaHist:[],q:[],pos:0,metrics:{}});S.ring.fill(0);S.mark.fill(0)}
+
+/* ---------- opnemen ---------- */
+function startRec(mode='vrij'){S.rec={id:K.uid(),date:new Date().toISOString(),mode,beats:[],ecg:[],ecgN:0,t0:now(),src:S.src.kind};renderCtrl()}
+async function stopRec(silent){const r=S.rec;S.rec=null;renderCtrl();if(!r)return null;
+  const dur=Math.round(now()-r.t0);if(r.beats.length<20){if(!silent)toast('Te kort om te bewaren');return null}
+  const s=H.stats(r.beats),x=H.corrected(r.beats),a1=H.dfa1(x),sp=H.spectrum(x);
+  const meta={id:r.id,date:r.date,mode:r.mode,dur,src:r.src,hr:Math.round(s.hr),rmssd:Math.round(s.rmssd),sdnn:Math.round(s.sdnn),art:+(s.art*100).toFixed(1),
+    dfa:a1==null?null:+a1.toFixed(2),resp:sp?Math.round(sp.resp):null,hasEcg:r.ecgN>0,ecgN:r.ecgN,beats:r.beats};
+  if(r.ecgN){try{await idb.put(r.id,new Int16Array(r.ecg).buffer)}catch(e){meta.hasEcg=false;toast('ECG kon niet worden bewaard')}}
+  st.recs.unshift(meta);save();renderRecs();if(!silent)toast('Opname bewaard');return meta}
+
+/* ---------- ochtendmeting ---------- */
+function startMorning(){if(!S.src)return;S.morning={t0:now(),beats:[],f:new H.RRFilter(),done:false};startRec('ochtend');renderMorning()}
+async function finishMorning(){const m=S.morning;m.done=true;const meta=await stopRec(true);
+  const s=H.stats(m.beats),hrv=Math.round(s.rmssd),rhr=Math.round(s.hr);
+  if(s.cnt<50||s.pairs<40){m.result={fail:`Te weinig geldige hartslagen (${s.cnt}). Maak de elektroden nat, span de band en probeer opnieuw.`};renderMorning();return}
+  m.result={hrv,rhr,cnt:s.cnt,art:s.art,code:`KERN-HRV;${dkey(new Date())};${hrv};${rhr}`};
+  if(meta){meta.hrv=hrv;meta.rhr=rhr;save()}
+  renderMorning()}
+function saveToCheck(hrv,rhr,k=dkey(new Date())){try{const ck=JSON.parse(localStorage.getItem('kern.check.v1'))||{days:{}};ck.days=ck.days||{};
+  ck.days[k]={...(ck.days[k]||{}),hrv,rhr};delete ck.days[k].demo;localStorage.setItem('kern.check.v1',JSON.stringify(ck));toast('Opgeslagen in je ochtendcheck')}catch(e){toast('Opslaan mislukt')}}
+function renderMorning(){const el=$('#morning'),m=S.morning;
+  if(!m){el.innerHTML='';return}
+  if(m.result){const r=m.result;
+    if(r.fail){el.innerHTML=`<div class="banner" style="--d:var(--c-warn);background:var(--card-2);margin:14px 0 0"><span class="bar"></span><div>${esc(r.fail)}</div></div>`;return}
+    const q=r.art<.03?['goed','var(--c-peak)']:r.art<.08?['redelijk','var(--c-mid)']:['slecht','var(--c-warn)'];
+    el.innerHTML=`<div class="k3"><div class="stat"><div class="v num">${r.hrv}</div><div class="k">HRV (rMSSD, ms)</div></div><div class="stat"><div class="v num">${r.rhr}</div><div class="k">rusthartslag</div></div><div class="stat"><div class="v" style="color:${q[1]};font-size:18px">${q[0]}</div><div class="k">${nl(r.art*100,1)}% afgekeurd</div></div></div>
+      <div class="ctrl" style="margin-top:12px"><button class="btn pri" id="m-save">Opslaan in ochtendcheck</button><button class="btn" id="m-copy">Kopieer code</button></div>
+      <div class="hint" style="word-break:break-all">${esc(r.code)} · plak deze code in de ochtendcheck op een ander toestel</div>`;
+    $('#m-save').onclick=()=>saveToCheck(r.hrv,r.rhr);
+    $('#m-copy').onclick=async()=>{try{await navigator.clipboard.writeText(r.code);toast('Code gekopieerd')}catch(e){toast('Selecteer en kopieer de code hieronder')}};return}
+  const el2=now()-m.t0,p=Math.min(1,el2/(SETTLE+SPAN));
+  el.innerHTML=`<div class="prog"><i style="flex:${Math.max(.001,p)};background:var(--c-peak)"></i><i style="flex:${Math.max(.001,1-p)};background:var(--card-2)"></i></div>
+    <div class="hint" style="margin-top:4px">${el2<SETTLE?`Stabiliseren… nog ${Math.ceil(SETTLE-el2)} s`:`Meten… nog ${Math.max(0,Math.ceil(SETTLE+SPAN-el2))} s · ${m.beats.length} slagen`}. Lig stil, adem rustig, niet praten.</div>`;
+  if(el2>=SETTLE+SPAN)finishMorning()}
+
+/* ---------- bediening ---------- */
+const MODE_HINT={vrij:'Kijk live mee, ook tijdens een training. DFA α1 is vooral zinvol tijdens inspanning op de fiets of loopband. Druk op Opnemen om een meting met ECG te bewaren.',
+  ochtend:'Twee minuten liggend, direct na het wakker worden: 20 seconden stabiliseren en 100 seconden meten, precies zoals de check op Vandaag. Het ECG wordt meebewaard.'};
+function renderCtrl(){const c=$('#ctrl');$('#dot').classList.toggle('on',!!S.src);$('#mode-hint').textContent=MODE_HINT[S.mode];
+  if(S.busy){c.innerHTML='<button class="btn" disabled>Bezig…</button>';return}
+  if(!S.src){c.innerHTML=`<button class="btn pri" id="b-con">Verbind Polar H10</button><button class="btn" id="b-demo">Proefsignaal</button>`;
+    $('#b-con').onclick=()=>connect('polar');$('#b-demo').onclick=()=>connect('demo');return}
+  if(S.mode==='ochtend'){
+    c.innerHTML=S.morning&&!S.morning.result?`<button class="btn danger" id="b-mstop">Meting afbreken</button>`:`<button class="btn pri" id="b-mstart">${S.morning?'Opnieuw meten':'Start ochtendmeting'}</button><button class="btn" id="b-dis">Verbreek</button>`;
+    const a=$('#b-mstart');if(a)a.onclick=startMorning;const b=$('#b-mstop');if(b)b.onclick=()=>{S.morning=null;S.rec=null;renderCtrl();renderMorning();toast('Meting afgebroken')};
+  }else{
+    c.innerHTML=`<button class="btn ${S.rec?'danger':'pri'}" id="b-rec">${S.rec?'Stop en bewaar':'Opnemen'}</button><button class="btn" id="b-dis">Verbreek</button>`;
+    $('#b-rec').onclick=()=>S.rec?stopRec():startRec('vrij')}
+  const d=$('#b-dis');if(d)d.onclick=disconnect}
+K.segmented($('#mode'),v=>{if(S.rec&&S.rec.mode!==v){toast('Stop eerst de lopende opname');$$('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.mode));return}
+  S.mode=v;if(v!=='ochtend')S.morning=null;renderCtrl();renderMorning()});
+
+/* ---------- tekenen ---------- */
+function cv(id){const c=typeof id==='string'?$(id):id,r=c.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.max(10,Math.round(r.width)),h=Math.max(10,Math.round(r.height));
+  if(c.width!==w*d||c.height!==h*d){c.width=w*d;c.height=h*d}const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,h);return{x,w,h}}
+function axisText(x,t,px,py,al='left'){x.fillStyle=C.t2;x.font='11px -apple-system,system-ui,sans-serif';x.textAlign=al;x.fillText(t,px,py)}
+function line(id,pts,{ymin,ymax,color=C.peak,band,dots,zones,xspan,fmt=v=>Math.round(v)}={}){
+  pts=pts.filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));
+  const {x,w,h}=cv(id),L=34,B=16,T=6;if(!pts.length){axisText(x,'Nog geen gegevens',w/2,h/2,'center');return}
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),x1=Math.max(...xs),x0=xspan?x1-xspan:Math.min(...xs);
+  let lo=ymin??Math.min(...ys),hi=ymax??Math.max(...ys);if(hi-lo<1e-6){lo-=1;hi+=1}const pad=(hi-lo)*.08;if(ymin==null)lo-=pad;if(ymax==null)hi+=pad;
+  const X=v=>L+(v-x0)/((x1-x0)||1)*(w-L-4),Y=v=>T+(1-(v-lo)/(hi-lo))*(h-T-B);
+  if(zones)for(const[a,b,c]of zones){const ya=Y(Math.min(hi,b)),yb=Y(Math.max(lo,a));if(yb>ya){x.fillStyle=c;x.fillRect(L,ya,w-L-4,yb-ya)}}
+  if(band){x.fillStyle='rgba(48,196,106,.12)';x.fillRect(L,Y(band[1]),w-L-4,Y(band[0])-Y(band[1]))}
+  x.strokeStyle=C.line;x.lineWidth=1;for(let i=0;i<=3;i++){const v=lo+(hi-lo)*i/3,y=Y(v);x.beginPath();x.moveTo(L,y);x.lineTo(w-4,y);x.stroke();axisText(x,fmt(v),L-6,y+4,'right')}
+  if(dots){for(const p of pts){x.fillStyle=p[2]===0?C.warn:color;x.beginPath();x.arc(X(p[0]),Y(Math.max(lo,Math.min(hi,p[1]))),p[2]===0?2.6:1.8,0,7);x.fill()}return}
+  x.strokeStyle=color;x.lineWidth=2;x.lineJoin='round';x.beginPath();pts.forEach((p,i)=>{const px=X(p[0]),py=Y(p[1]);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()}
+
+/* ECG: verloop van links naar rechts als op een monitor, met papierraster (0,2 s en 0,5 mV) */
+function hpf(v){const a=.9764;const y=a*(S.hp.y+v-S.hp.x);S.hp.x=v;S.hp.y=y;return y}   // hoogdoorlaat ~0,5 Hz tegen basislijnzwerven
+function detectR(y,i){const d=S.det;d.n++;const [p2,p1]=d.prev;d.prev=[p1,y];d.thr*=.9995;
+  if(p1>p2&&p1>=y&&p1>.55*d.thr&&p1>150&&d.n-d.last>FS*.27){d.last=d.n;d.thr=Math.max(d.thr*.7,p1);return true}
+  if(y>d.thr)d.thr=y;return false}
+function drawECG(dt){
+  let n=Math.round(FS*dt);if(S.q.length>FS*1.5)n+=S.q.length-FS;   // bij achterstand inhalen
+  for(let k=0;k<n&&S.q.length;k++){const y=hpf(S.q.shift());S.ring[S.pos]=y;S.mark[S.pos]=0;if(detectR(y)){const pi=(S.pos-1+S.ring.length)%S.ring.length;S.mark[pi]=1}S.pos=(S.pos+1)%S.ring.length}
+  const {x,w,h}=cv('#cv-ecg'),N=S.ring.length;
+  // raster
+  x.strokeStyle=C.grid;x.lineWidth=1;for(let s=0;s<=30;s++){const px=s/30*w;x.beginPath();x.moveTo(px,0);x.lineTo(px,h);x.stroke()}
+  let mx=300;for(let i=0;i<N;i++)mx=Math.max(mx,Math.abs(S.ring[i]));const sc=(h/2-10)/(mx*1.05);
+  x.strokeStyle='#26262a';for(let mv=-3000;mv<=3000;mv+=500){const py=h/2-mv*sc;if(py<0||py>h)continue;x.beginPath();x.moveTo(0,py);x.lineTo(w,py);x.stroke()}
+  if(now()-S.ecgLast>3){axisText(x,S.src?(S.src.ecg?'Wachten op ECG… zit de band strak en nat?':'ECG niet beschikbaar, alleen hartslag'):'Verbind een band of start het proefsignaal',w/2,h/2,'center');$('#ecg-chip').textContent='geen signaal';return}
+  $('#ecg-chip').textContent=`130 Hz · schaal ${nl(Math.round(mx*1.05/100)/10)} mV`;
+  const gap=Math.round(N*.03);x.strokeStyle=C.peak;x.lineWidth=1.6;x.lineJoin='round';x.beginPath();let pen=false;
+  for(let i=0;i<N;i++){const age=(S.pos-i+N)%N;if(age<=gap&&age>0){pen=false;continue}const px=i/N*w,py=h/2-S.ring[i]*sc;pen?x.lineTo(px,py):x.moveTo(px,py);pen=true}
+  x.stroke();
+  x.fillStyle=C.mid;for(let i=0;i<N;i++)if(S.mark[i]){const age=(S.pos-i+N)%N;if(age<=gap)continue;x.beginPath();x.arc(i/N*w,h/2-S.ring[i]*sc-8,2.5,0,7);x.fill()}
+  x.fillStyle='rgba(255,255,255,.75)';x.fillRect(S.pos/N*w,0,1.5,h)}
+
+/* ---------- metingen per seconde ---------- */
+const DFA_ZONES=[[0,.5,'rgba(240,99,79,.13)'],[.5,.75,'rgba(245,166,35,.13)'],[.75,2,'rgba(48,196,106,.10)']];
+function dfaZone(a){return a==null?['—','var(--text-2)','Na 2 minuten meten verschijnt hier je waarde.']
+  :a>=1?[nl(a,2),'var(--c-peak)','Ruim onder je aerobe drempel. In rust is een waarde van 1 tot 1,5 gewoon.']
+  :a>=.75?[nl(a,2),'var(--c-good)','Onder je aerobe drempel: rustige duurtraining.']
+  :a>=.5?[nl(a,2),'var(--c-mid)','Tussen aerobe en anaerobe drempel: tempozone.']
+  :[nl(a,2),'var(--c-warn)','Boven je anaerobe drempel: zwaar.']}
+let tick=0;
+function second(){tick++;const t=now();
+  const w60=S.beats.filter(b=>b.t>S.beatT-60),s=H.stats(w60);
+  $('#hr').innerHTML=`${S.src&&S.hr?S.hr:'—'}<small>sl/min</small>`;
+  $('#hr-chip').textContent=S.src?(S.contact?(S.battery!=null?`batterij ${S.battery}%`:''):'geen huidcontact'):'';
+  $('#rmssd').innerHTML=`${s.pairs>=10?Math.round(s.rmssd):'—'}<small>ms rMSSD</small>`;
+  $('#sdnn').textContent=s.cnt>=10?Math.round(s.sdnn):'—';$('#pnn50').textContent=s.pairs>=10?Math.round(s.pnn50):'—';
+  $('#art').textContent=w60.length?nl(s.art*100,1)+'%':'—';$('#art').style.color=s.art>.05?'var(--c-warn)':'';
+  if(tick%5===0||!S.metrics.dfaT){const w2=S.beats.filter(b=>b.t>S.beatT-120),x2=H.corrected(w2),a=S.beatT>=110?H.dfa1(x2):null;
+    S.metrics.dfa=a;S.metrics.dfaT=t;if(a!=null){S.dfaHist.push([t,a]);if(S.dfaHist.length>720)S.dfaHist.shift()}S.metrics.pc=H.poincare(x2);S.metrics.pcPts=x2}
+  if(tick%10===0||!S.metrics.spT){const x3=H.corrected(S.beats.filter(b=>b.t>S.beatT-180));S.metrics.sp=S.beatT>=170?H.spectrum(x3):null;S.metrics.spT=t}
+  const z=dfaZone(S.metrics.dfa);$('#dfa').textContent=z[0];$('#dfa').style.color=z[1];$('#dfa-zone').textContent=z[2];
+  const sp=S.metrics.sp,pc=S.metrics.pc;
+  $('#resp').textContent=sp&&sp.resp?Math.round(sp.resp):'—';$('#lfhf').textContent=sp&&sp.ratio!=null?nl(sp.ratio,1):'—';$('#sd12').textContent=pc?`${Math.round(pc.sd1)} / ${Math.round(pc.sd2)}`:'—';
+  // grafieken
+  const t0=t;line('#cv-hr',S.hrHist.filter(p=>p[0]>t0-300).map(p=>[p[0]-t0,p[1]]),{xspan:300});
+  const dh=S.dfaHist.filter(p=>p[0]>t0-1800).map(p=>[p[0]-t0,p[1]]);line('#cv-dfa',dh,{ymin:0,ymax:1.6,zones:DFA_ZONES,xspan:dh.length?Math.max(300,-dh[0][0]):300,fmt:v=>nl(v,1)});
+  line('#cv-rr',S.beats.filter(b=>b.t>S.beatT-300).map(b=>[b.t,b.rr,b.ok?1:0]),{dots:true,xspan:300});
+  drawPoincare('#cv-pc',S.metrics.pcPts||[],pc);
+  drawSpectrum('#cv-sp',sp);
+  if(S.morning&&!S.morning.result)renderMorning()}
+function drawPoincare(id,xs,pc,leg='#pc-legend'){const {x,w,h}=cv(id);if(xs.length<10){axisText(x,'Na een minuut meten verschijnt hier het patroon',w/2,h/2,'center');return}
+  let lo=Math.min(...xs),hi=Math.max(...xs);const pad=Math.max(20,(hi-lo)*.12);lo-=pad;hi+=pad;const P=v=>(v-lo)/(hi-lo),m=24;
+  const X=v=>m+P(v)*(w-m-6),Y=v=>h-m-P(v)*(h-m-6);
+  x.strokeStyle=C.line;x.beginPath();x.moveTo(X(lo),Y(lo));x.lineTo(X(hi),Y(hi));x.stroke();
+  axisText(x,Math.round(lo)+' ms',m,h-6);axisText(x,Math.round(hi)+' ms',w-4,h-6,'right');
+  x.fillStyle='rgba(48,196,106,.75)';for(let i=1;i<xs.length;i++){x.beginPath();x.arc(X(xs[i-1]),Y(xs[i]),2.2,0,7);x.fill()}
+  if(pc){const mu=H.mean(xs),cx=X(mu),cy=Y(mu),k=(w-m-6)/(hi-lo);x.save();x.translate(cx,cy);x.rotate(-Math.PI/4);x.strokeStyle=C.mid;x.lineWidth=1.5;x.beginPath();x.ellipse(0,0,Math.max(2,pc.sd2*k),Math.max(2,pc.sd1*k),0,0,7);x.stroke();x.restore();
+    const lg=$(leg);if(lg)lg.innerHTML=`<span style="--d:var(--c-peak)">slag n tegen n+1</span><span style="--d:var(--c-mid)">SD1 ${Math.round(pc.sd1)} · SD2 ${Math.round(pc.sd2)} ms</span>`}}
+function drawSpectrum(id,sp){const {x,w,h}=cv(id);if(!sp){axisText(x,'Na 3 minuten meten verschijnt hier het spectrum',w/2,h/2,'center');return}
+  const P=sp.P,mx=Math.max(...P.map(p=>p[1]))||1,L=10,B=18,X=f=>L+f/.5*(w-L-6),Y=p=>h-B-p/mx*(h-B-8);
+  x.fillStyle='rgba(245,166,35,.10)';x.fillRect(X(.04),0,X(.15)-X(.04),h-B);x.fillStyle='rgba(48,196,106,.10)';x.fillRect(X(.15),0,X(.4)-X(.15),h-B);
+  axisText(x,'LF',(X(.04)+X(.15))/2,12,'center');axisText(x,'HF',(X(.15)+X(.4))/2,12,'center');
+  for(const f of [0,.1,.2,.3,.4,.5])axisText(x,nl(f,1)+' Hz',X(f),h-4,f===0?'left':f===.5?'right':'center');
+  x.strokeStyle=C.peak;x.lineWidth=2;x.beginPath();P.forEach((p,i)=>{i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1]))});x.stroke();
+  if(sp.resp){const fx=X(sp.resp/60);x.strokeStyle=C.mid;x.setLineDash([3,3]);x.beginPath();x.moveTo(fx,14);x.lineTo(fx,h-B);x.stroke();x.setLineDash([])}}
+
+/* ---------- lus ---------- */
+let lastF=0;function frame(ts){const dt=lastF?Math.min(.25,(ts-lastF)/1000):0;lastF=ts;if(!document.hidden&&$('#v-live').classList.contains('on'))drawECG(dt);requestAnimationFrame(frame)}
+requestAnimationFrame(frame);setInterval(()=>{if(!document.hidden)second()},1000);
+addEventListener('resize',()=>{S.metrics.dfaT=0;second()});
+
+/* ---------- opnames ---------- */
+const MODE_L={vrij:'Vrije meting',ochtend:'Ochtendmeting'};
+const fmtDur=s=>s>=3600?`${Math.floor(s/3600)}u${String(Math.round(s%3600/60)).padStart(2,'0')}`:s>=60?`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} min`:`${s} s`;
+function renderRecs(){const r=st.recs;$('#rec-sub').textContent=r.length?`${r.length} opnames op dit toestel`:'Nog geen opnames';
+  $('#rec-list').innerHTML=r.length?r.map(m=>`<div class="item" data-rec="${m.id}"><div class="ring sm">${ringSVG(Math.min(1,(m.rmssd||0)/100),m.mode==='ochtend'?C.peak:C.mid,58)}<div class="in" style="background:#1f1f21;font-size:14px">${m.mode==='ochtend'?'☀︎':'♥︎'}</div></div>
+    <div class="meta"><div class="nm">${MODE_L[m.mode]||'Meting'}${m.src==='demo'?' · proef':''}</div><div class="ds">${[relDay(m.date),fmtDur(m.dur),m.hr+' sl/min',m.dfa!=null?'α1 '+nl(m.dfa,2):null,m.hasEcg?'ECG':null].filter(Boolean).join(' · ')}</div></div><div class="sc num">${m.rmssd}</div></div>`).join('')
+    :'<div class="empty">Verbind je band op het tabblad Live en druk op Opnemen, of doe een ochtendmeting.</div>';
+  $('#rec-hint').textContent=r.length?'Het getal rechts is je rMSSD in ms. Ruwe ECG-gegevens staan alleen op dit toestel en gaan niet mee in de back-up van Kern; exporteer ze als CSV als je ze wilt bewaren.':''}
+$('#rec-list').addEventListener('click',e=>{const it=e.target.closest('[data-rec]');if(it)recSheet(it.dataset.rec)});
+async function recSheet(id){const m=st.recs.find(r=>r.id===id);if(!m)return;
+  const beats=m.beats.map(b=>({rr:b.rr,ok:!!b.ok})),s=H.stats(beats),x=H.corrected(beats),pc=H.poincare(x),sp=H.spectrum(x);
+  openSheet(`<h2>${MODE_L[m.mode]||'Meting'}</h2><div class="muted" style="margin-bottom:12px">${new Date(m.date).toLocaleString('nl-NL',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})} · ${fmtDur(m.dur)}${m.src==='demo'?' · proefsignaal':''}</div>
+    <div class="k3"><div class="stat"><div class="v num">${Math.round(s.hr)}</div><div class="k">gem. hartslag</div></div><div class="stat"><div class="v num">${Math.round(s.rmssd)}</div><div class="k">rMSSD ms</div></div><div class="stat"><div class="v num">${Math.round(s.sdnn)}</div><div class="k">SDNN ms</div></div></div>
+    <div class="k3"><div class="stat"><div class="v num">${m.dfa!=null?nl(m.dfa,2):'—'}</div><div class="k">DFA α1</div></div><div class="stat"><div class="v num">${sp?Math.round(sp.resp):'—'}</div><div class="k">adem /min</div></div><div class="stat"><div class="v num" style="${s.art>.05?'color:var(--c-warn)':''}">${nl(s.art*100,1)}%</div><div class="k">afgekeurd</div></div></div>
+    ${m.mode==='ochtend'&&m.hrv?`<button class="btn pri" id="r-check">Zet in ochtendcheck van ${relDay(m.date)}</button>`:''}
+    <h3>RR-intervallen</h3><canvas class="cv" id="r-rr"></canvas>
+    <h3>Poincaré</h3><canvas class="cv sq" id="r-pc" style="max-width:320px"></canvas>
+    ${m.hasEcg?`<h3>ECG</h3><canvas class="cv ecg" id="r-ecg"></canvas><div class="ecgnav"><button class="btn" id="r-prev">‹</button><span id="r-pos"></span><button class="btn" id="r-next">›</button></div>`:''}
+    <div class="ctrl" style="margin-top:16px"><button class="btn" id="r-csv">Exporteer RR (CSV)</button>${m.hasEcg?'<button class="btn" id="r-ecgcsv">Exporteer ECG (CSV)</button>':''}</div>
+    <button class="btn danger" id="r-del">Verwijderen</button>`);
+  let t=0;line('#r-rr',beats.map(b=>(t+=b.rr/1000,[t,b.rr,b.ok?1:0])),{dots:true});
+  const pcPts=x.slice(-240);drawPoincare('#r-pc',pcPts,H.poincare(pcPts),null);
+  const rc=$('#r-check');if(rc)rc.onclick=()=>saveToCheck(m.hrv,m.rhr,dkey(m.date));
+  $('#r-csv').onclick=()=>{let tt=0;download(`hart-rr-${m.date.slice(0,10)}.csv`,'tijd_s;rr_ms;geldig\n'+m.beats.map(b=>(tt+=b.rr/1000,`${tt.toFixed(3)};${b.rr};${b.ok}`)).join('\n'))};
+  $('#r-del').onclick=async()=>{if(!confirm('Deze opname verwijderen?'))return;st.recs=st.recs.filter(r=>r.id!==id);await idb.del(id);save();closeSheet();renderRecs()};
+  if(m.hasEcg){let buf;try{buf=await idb.get(id)}catch(e){}
+    if(!buf){$('#r-pos').textContent='ECG niet gevonden op dit toestel';return}
+    const ecg=new Int16Array(buf),page=FS*8,pages=Math.max(1,Math.ceil(ecg.length/page));let pi=0;
+    const draw=()=>{const {x:c,w,h}=cv('#r-ecg'),a=pi*page,seg=Array.from(ecg.subarray(a,a+page));
+      // baseline per pagina eraf (mediaan) zodat het signaal in beeld blijft
+      const srt=[...seg].sort((p,q)=>p-q),med=srt[srt.length>>1]||0;let mx=300;for(const v of seg)mx=Math.max(mx,Math.abs(v-med));const sc=(h/2-8)/(mx*1.05);
+      c.strokeStyle=C.grid;for(let s2=0;s2<=40;s2++){const px=s2/40*w;c.beginPath();c.moveTo(px,0);c.lineTo(px,h);c.stroke()}
+      c.strokeStyle=C.peak;c.lineWidth=1.4;c.beginPath();seg.forEach((v,i)=>{const px=i/page*w,py=h/2-(v-med)*sc;i?c.lineTo(px,py):c.moveTo(px,py)});c.stroke();
+      $('#r-pos').textContent=`${fmtDur(Math.round(a/FS))} – ${fmtDur(Math.round(Math.min(ecg.length,a+page)/FS))} van ${fmtDur(Math.round(ecg.length/FS))}`};
+    $('#r-prev').onclick=()=>{if(pi>0){pi--;draw()}};$('#r-next').onclick=()=>{if(pi<pages-1){pi++;draw()}};draw();
+    $('#r-ecgcsv').onclick=()=>{const rows=['tijd_s;ecg_uv'];for(let i=0;i<ecg.length;i++)rows.push(`${(i/FS).toFixed(4)};${ecg[i]}`);download(`hart-ecg-${m.date.slice(0,10)}.csv`,rows.join('\n'))}}}
+async function download(name,text){const f=new File([text],name,{type:'text/csv'});
+  try{if(navigator.canShare&&navigator.canShare({files:[f]})&&/iPhone|iPad|Android/.test(navigator.userAgent)){await navigator.share({files:[f]});return}}catch(e){if(e.name==='AbortError')return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=name;a.click();toast('Bestand opgeslagen')}
+
+/* ---------- uitleg ---------- */
+const INFO={
+  browser:{t:'Op welk toestel werkt dit?',s:'Chrome of Edge op je laptop, Bluefy op je iPhone',b:`<p>Dit scherm praat via <b>Web Bluetooth</b> met je band. Dat werkt in <b>Chrome</b> en <b>Edge</b> op een Mac of Windows-laptop en op Android, en in de app <b>Bluefy</b> op een iPhone. <b>Safari</b> (Mac en iPhone) en <b>Firefox</b> ondersteunen het niet.</p><p>Elke browser bewaart zijn eigen gegevens. Een opname in Chrome op je laptop staat dus niet in Kern op je iPhone. Gebruik voor de ochtendmeting de knop <b>Kopieer code</b> en plak die in de ochtendcheck op je telefoon, of maak een back-up en zet die terug.</p><ul><li>De band verbindt met maar één toestel tegelijk. Sluit Polar Flow, Polar Beat, Strava of je horloge.</li><li>De band zendt alleen als hij huidcontact heeft: maak de elektroden nat.</li><li>Koppel de band niet zelf in de Bluetooth-instellingen van je laptop; laat de browser dat doen.</li></ul>`},
+  ecg:{t:'Het ECG van een borstband',s:'Wat je ziet en wat niet',b:`<p>De Polar H10 meet de elektrische activiteit van je hart via twee elektroden op je borst en stuurt die 130 keer per seconde door, in microvolt. Je ziet daardoor de vorm van elke hartslag: de kleine P-golf, de scherpe QRS-piek en de bredere T-golf.</p><p>Voor de weergave wordt langzaam zwerven van de basislijn (door ademhaling en beweging) weggefilterd. Opgeslagen opnames bevatten het ruwe signaal. De oranje stip markeert een herkende piek; die herkenning is eenvoudig en alleen bedoeld voor het beeld. De HRV-getallen komen uit de slagtijden die de band zelf meet, tot op de milliseconde.</p><p><b>Kritisch:</b> dit is één afleiding met 130 metingen per seconde, waar een ziekenhuis-ECG twaalf afleidingen en meestal 500 of meer per seconde gebruikt. Vormdetails zijn daardoor grof, en bewegen, droge elektroden en spierspanning geven storing die op een afwijking kan lijken. De band is een sportsensor, geen medisch hulpmiddel. Gebruik dit nooit om zelf iets vast te stellen of gerust te stellen: bij hartkloppingen, pijn op de borst, flauwvallen of benauwdheid ga je naar een arts.</p>`},
+  hrv:{t:'HRV: rMSSD, SDNN en pNN50',s:'Variatie tussen slagen',b:`<p><b>rMSSD</b> is de wortel van het gemiddelde gekwadrateerde verschil tussen opeenvolgende slagen. Het volgt vooral de rem op je hart via de nervus vagus (=de rust-en-herstelkant van je zenuwstelsel) en is de standaardmaat voor dagelijkse HRV.</p><p><b>SDNN</b> is de spreiding van alle slagen samen; die reageert ook op tragere schommelingen. <b>pNN50</b> is het percentage opeenvolgende slagen dat meer dan 50 ms verschilt.</p><p>De live waarden gaan over de laatste 60 seconden. Slagen die onmogelijk zijn of meer dan 20% afwijken van de vorige worden afgekeurd en tellen niet mee.</p><p><b>Kritisch:</b> live HRV schommelt sterk met je ademhaling, houding en praten. Vergelijk alleen metingen die op dezelfde manier zijn gedaan, zoals de ochtendmeting. Tijdens inspanning daalt rMSSD naar een paar milliseconden en zegt dan weinig meer.</p><p class="ref">Task Force ESC/NASPE (1996) Circulation · Shaffer & Ginsberg (2017) Front Public Health · Plews et al. (2013) Sports Med</p>`},
+  dfa:{t:'DFA α1 en je aerobe drempel',s:'Het patroon in je hartslag tijdens inspanning',b:`<p>DFA α1 (=detrended fluctuation analysis, korte termijn) meet of de schommelingen in je hartslag een herkenbaar patroon hebben (rond 1) of willekeurig worden (rond 0,5). Hoe zwaarder de inspanning, hoe lager de waarde.</p><ul><li><b>Boven 0,75:</b> onder je aerobe drempel, rustige duurtraining</li><li><b>0,75 tot 0,5:</b> tussen aerobe en anaerobe drempel</li><li><b>Onder 0,5:</b> boven je anaerobe drempel</li></ul><p>Onderzoek van Rogers en Gronwald legt de grens van 0,75 bij de aerobe drempel, ook bij recreatieve sporters. De app rekent over de laatste 2 minuten slagen, met vensters van 4 tot 16 slagen, en vervangt afgekeurde slagen door de mediaan van hun buren.</p><p><b>Kritisch:</b> dit werkt alleen tijdens inspanning met een geleidelijk stijgende belasting, bij weinig storing (liefst onder 3% afgekeurd) en met een borstband. In rust ligt de waarde meestal rond 1 tot 1,5 en zegt dan niets over drempels. Tijdens hardlopen geeft een borstband vaker storing dan op de fiets. Het venster van 2 minuten komt uit de praktijk, niet uit vastgestelde normen. De validatie is gedaan bij kleine groepen; gebruik het als hulpmiddel naast een gewone inspanningstest, niet in plaats ervan.</p><p class="ref">Rogers et al. (2021) Front Physiol · Rogers & Gronwald (2022) Front Physiol · Gronwald et al. (2020) Front Physiol</p>`},
+  tacho:{t:'RR-intervallen',s:'Elke stip is één hartslag',b:`<p>De grafiek toont de tijd tussen opeenvolgende slagen over de laatste 5 minuten. In rust zie je de reeks golven met je ademhaling mee: bij inademen worden de intervallen korter (hartslag omhoog), bij uitademen langer. Dat heet respiratoire sinusaritmie en is een normaal, gezond teken.</p><p><b>Rood</b> zijn afgekeurde slagen: meestal storing door een losse band of droge elektroden, soms een extra slag. Eén losse rode stip is normaal; veel rode stippen betekenen dat de HRV-getallen niet betrouwbaar zijn.</p><p><b>Kritisch:</b> het filter kan ook echte extra slagen afkeuren. Wil je weten of je hart extra slagen maakt, laat dat beoordelen door een arts met een echt ECG.</p>`},
+  poincare:{t:'Poincaré-plot',s:'Elke slag uitgezet tegen de volgende',b:`<p>Elke stip is een paar opeenvolgende slagen: het eerste interval op de horizontale as, het volgende op de verticale. De wolk ligt langs de diagonaal.</p><p><b>SD1</b> is de breedte van de wolk dwars op de diagonaal: snelle variatie van slag tot slag, wiskundig gelijk aan rMSSD gedeeld door √2. <b>SD2</b> is de lengte langs de diagonaal: tragere schommelingen. Een smalle, korte wolk betekent weinig variatie, bijvoorbeeld bij vermoeidheid of inspanning.</p><p><b>Kritisch:</b> SD1 voegt niets toe aan rMSSD; de plot is vooral handig om in één oogopslag storing te zien (losse stippen ver van de wolk).</p><p class="ref">Brennan et al. (2001) IEEE Trans Biomed Eng</p>`},
+  spectrum:{t:'Spectrum, ademhaling en LF/HF',s:'Welke ritmes zitten er in je hartslag',b:`<p>De RR-reeks van de laatste 3 minuten wordt opgedeeld in ritmes. <b>HF</b> (0,15 tot 0,4 Hz, ofwel 9 tot 24 keer per minuut) volgt je ademhaling. De hoogste piek daarin is een schatting van je <b>ademfrequentie</b>. <b>LF</b> (0,04 tot 0,15 Hz) hangt samen met bloeddrukregeling.</p><p><b>Kritisch:</b> de LF/HF-verhouding wordt vaak gebruikt als maat voor de balans tussen inspanning en rust in je zenuwstelsel, maar die uitleg is wetenschappelijk omstreden. Als je langzamer ademt dan 9 keer per minuut, valt je ademhaling in het LF-gebied en schiet de verhouding omhoog zonder dat er iets aan de hand is. De ademfrequentie is een schatting die tijdens inspanning minder klopt. Toon dit dus als interessante informatie, niet als oordeel.</p><p class="ref">Billman (2013) Front Physiol · Task Force ESC/NASPE (1996) Circulation · Shaffer & Ginsberg (2017) Front Public Health</p>`}
+};
+function renderInfo(){$('#science-list').innerHTML=Object.entries(INFO).map(([k,v])=>`<div class="item plain" data-info="${k}"><div class="meta"><div class="nm">${v.t}</div><div class="ds">${v.s}</div></div><span class="muted">›</span></div>`).join('')}
+
+/* ---------- feed voor Vandaag ---------- */
+function publish(){const l=st.recs.find(r=>r.src!=='demo')||st.recs[0];K.feed.set('hart',{n:st.recs.length,last:l?{date:l.date,mode:l.mode,rmssd:l.rmssd,hr:l.hr,dfa:l.dfa}:null})}
+
+/* ---------- start ---------- */
+if(!(navigator.bluetooth)){$('#nobt').innerHTML=`<div class="banner" style="--d:var(--c-mid)"><span class="bar"></span><div>Deze browser kan geen Bluetooth gebruiken. Op je laptop werkt het in <b>Chrome</b> of <b>Edge</b>, op je iPhone in <b>Bluefy</b>. Safari en Firefox ondersteunen het niet. Je kunt het hier wel uitproberen met het <b>proefsignaal</b>. <button class="info" data-info="browser" style="padding:0">Meer</button></div></div>`}
+if(new URLSearchParams(location.search).get('mode')==='ochtend'){S.mode='ochtend';$$('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.v==='ochtend'))}
+K.info(INFO);K.tabs(t=>{if(t==='live'){S.metrics.dfaT=0;second()}});
+addEventListener('pagehide',()=>{if(S.src)S.src.close()});
+renderCtrl();renderRecs();renderInfo();publish();second();
+</script>
+</body>
+</html>

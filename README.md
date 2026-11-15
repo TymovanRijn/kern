@@ -11,6 +11,7 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
 | Kracht | `kracht/` | Krachtlog met routines, rusttimer en voortgang per oefening |
 | Eten | `eten/` | Plantaardig weekmenu (55 recepten met bereiding, alleen gasfornuis en airfryer) afgestemd op de training; kiest de goedkoopste week en rekent de boodschappen uit per verpakking |
 | Geld | `geld/` | Uitgaven uit een bank-CSV, categorieën en vaste lasten |
+| Hart | `hart/` | Live ECG, hartslag, HRV, DFA α1, Poincaré en spectrum met een Polar H10; opnames met ruw ECG (IndexedDB), CSV-export, ochtendmeting naar Vandaag |
 | Amifo | `amifo/` | Vriendenboek |
 
 ## Architectuur
@@ -28,6 +29,9 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
 - **Back-up.** Eén JSON-bestand met alle onderdelen, te maken en terug te zetten bij Instellingen. Inloggegevens van koppelingen gaan niet mee.
 
 ## Bluetooth
+
+Web Bluetooth werkt in Chrome en Edge (macOS, Windows, Android) en in Bluefy (iOS); niet in Safari of Firefox. Hart gebruikt naast de standaard Heart Rate Service ook de Polar Measurement Data-service (`fb005c80-…`) voor ruw ECG op 130 Hz.
+
 
 Safari en een PWA op het beginscherm van iOS ondersteunen geen Web Bluetooth. In Bluefy kan de ochtendcheck de Heart Rate Service van een borstband lezen (RR-intervallen) en daar rMSSD en rusthartslag uit berekenen. Bluefy bewaart gegevens apart van Safari; een gemeten waarde kan als korte code (`KERN-HRV;datum;hrv;rusthartslag`) worden overgezet.
 
