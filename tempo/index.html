@@ -85,6 +85,7 @@
     <div class="card-h"><h3 id="phase-title"></h3><button class="info" data-info="periodization">?</button></div>
     <div class="phase-bar" id="phase-bar"></div>
     <div class="hint" id="phase-hint"></div>
+    <div class="pills" id="plan-pills" style="margin-top:12px"></div>
   </div>
   <div id="plan-weeks"></div>
 </section>
@@ -95,9 +96,11 @@
   <h1>Instellingen</h1>
   <div class="sub">Profiel, koppelingen en data</div>
 
+  <div class="label">Schema</div>
+  <div class="card" id="set-plan"></div>
   <div class="label">Fysiologie</div>
   <div class="card" id="set-phys"></div>
-  <div class="label">Marathon</div>
+  <div class="label" id="set-race-label">Automatisch schema</div>
   <div class="card" id="set-race"></div>
 
   <div class="label">Strava</div>
@@ -135,6 +138,7 @@
 
 
 <script src="../core/core.js"></script>
+<script src="schema.js"></script>
 <script>
 /* =========================================================
    Tempo — persoonlijke trainings-PWA
@@ -310,6 +314,9 @@ function renderHome(){
   $('#pmc').innerHTML=bars+line('atl','#f5a623')+line('ctl','#30c46a');
 
   // advies
+  const dow=(today0().getDay()+6)%7;
+  if(st.custom){adviceCustom(tsb)}else{
+  // advies
   const pl=plan(),wi=Math.floor((today0()-new Date(s.planStart+'T00:00'))/DAY/7);
   const dow=(today0().getDay()+6)%7;
   let sess=wi>=0&&wi<pl.nW?pl.weeks[wi].days[dow]:null;
@@ -323,6 +330,7 @@ function renderHome(){
   const doneToday=st.acts.some(a=>dkey(a.date)===dkey(new Date()));
   $('#today-chip').textContent=doneToday?'✓ gedaan':sess?(sess.sport==='run'?'Lopen':sess.sport==='bike'?'Fietsen':'Rust'):'';
   $('#advice').innerHTML=adv;
+  }
 
   // week tiles (ma..zo)
   const mon=new Date(today0());mon.setDate(mon.getDate()-dow);
@@ -375,7 +383,46 @@ function renderLog(){
 }
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-function renderPlan(){
+/* ---------- eigen schema (ingelezen uit een bestand, blijft op dit toestel) ---------- */
+const P=()=>st.custom;
+function itemRow(w,dow,idx,x,done){const ic=x.sport==='bike'?'🚴 ':x.sport==='run'?'🏃 ':x.sport==='strength'?'🏋️ ':'';
+  return `<div class="day" data-sess="${w.n-1},${dow},${idx}" style="cursor:pointer"><span class="d">${TP.DOWS[dow]}</span><span class="s" style="${x.sport==='rest'?'color:var(--text-2)':''}">${ic}${esc(x.title)}${x.short?`<small>${esc(x.short)}</small>`:''}</span>${done?'<span class="ok">✓</span>':'<span class="muted">›</span>'}</div>`}
+function weekRows(w,actDays){let h='';w.days.forEach((items,dow)=>{const dd=TP.dateOf(w,dow);
+  items.forEach((x,idx)=>{const done=(x.sport==='run'||x.sport==='bike')&&actDays[dkey(dd)+x.sport];h+=itemRow(w,dow,idx,x,done)})});return h}
+function renderPlanCustom(){const p=P(),wi=TP.weekIndex(p),N=p.weeks.length,cw=p.weeks[Math.max(0,Math.min(N-1,wi))];
+  $('#plan-sub').textContent=`${p.name} · ${N} weken`;
+  $('#phase-title').textContent=wi<0?'Schema start binnenkort':wi>=N?'Schema afgerond':`Week ${wi+1} van ${N} · ${cw.phase}${cw.light?' · lichte week':''}`;
+  $('#phase-bar').innerHTML=p.weeks.map((w,i)=>`<i class="${i<wi?'done':i===wi?'now':''}"></i>`).join('');
+  const ph=(p.phases||[]).find(f=>cw.n>=f[1]&&cw.n<=f[2]);
+  $('#phase-hint').textContent=ph?`${ph[0]}: ${ph[3]}.`:'';
+  $('#plan-pills').innerHTML=[['goals','Doelen en fasen'],['zones','Zones'],['rules','Spelregels'],['race','Racedag']].map(([k,l])=>`<button class="pill" data-plan="${k}">${l}</button>`).join('');
+  const actDays={};st.acts.forEach(a=>{actDays[dkey(a.date)+(isRun(a)?'run':'bike')]=1});
+  $('#plan-weeks').innerHTML=p.weeks.map((w,i)=>{const open=i>=wi-1&&i<=wi+1||wi<0&&i===0;
+    return `<div class="week ${i===wi?'cur':''}" id="wk${i}"><div class="week-h"><b>Week ${w.n}</b><span class="muted">${new Date(w.start+'T00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${esc(w.phase)}${w.light?' · licht':''}</span></div>
+      <div class="muted" style="margin:4px 0 10px;font-size:15px">≈ ${nl(w.km)} km lopen${w.note?` · ${esc(w.note)}`:''}</div>
+      ${open?weekRows(w,actDays):`<button class="btn" data-open="${i}" style="margin-top:0;padding:10px;font-size:15px">Toon dagen</button>`}</div>`}).join('');
+  $$('[data-open]').forEach(b=>b.onclick=()=>{b.outerHTML=weekRows(p.weeks[b.dataset.open],actDays)});
+}
+function sessSheet(wi,dow,idx){const p=P(),w=p.weeks[wi];if(!w)return;const d=TP.dateOf(w,dow);
+  const acts=st.acts.filter(a=>dkey(a.date)===dkey(d));openSheet(TP.sessionHTML(p,w,dow,idx,acts))}
+document.addEventListener('click',e=>{const s2=e.target.closest('[data-sess]');if(s2&&P()){const[a,b,c]=s2.dataset.sess.split(',').map(Number);sessSheet(a,b,c);return}
+  const pl=e.target.closest('[data-plan]');if(pl&&P()){const f={goals:TP.goalsHTML,zones:TP.zonesHTML,rules:TP.rulesHTML,race:TP.raceHTML}[pl.dataset.plan];if(f)openSheet(f(P()))}});
+function adviceCustom(tsb){const p=P(),here=TP.locate(p,new Date()),tm=new Date();tm.setDate(tm.getDate()+1);const next=TP.locate(p,tm);
+  let adv='',chip='';
+  if(!here){const wi=TP.weekIndex(p);adv=wi<0?`Je schema start op ${new Date(p.weeks[0].start+'T00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}. Tot die tijd: rustig onderhouden.`:'Je schema is afgelopen.'}
+  else{const items=here.items,m=TP.main(items),cls=TP.dayCls(items);
+    adv=items.map((x,idx)=>`<div data-sess="${here.wi},${here.dow},${idx}" style="cursor:pointer;margin-bottom:8px"><b>${esc(x.title)}</b> <span class="muted">›</span>${x.short?`<br><span class="muted">${esc(x.short)}</span>`:''}</div>`).join('');
+    const alert=TP.rhrAlert(p);
+    if(alert&&(cls==='hard'||cls==='long'))adv+=`<div class="banner" style="--d:var(--c-warn);background:var(--card-2);margin:10px 0 0"><span class="bar"></span><div>Je rusthartslag was ${alert.n} ochtenden op rij ${alert.lim} of hoger (${alert.vals.join(', ')}). Volgens je spelregels vervang je deze training door Z2 of rust.</div></div>`;
+    else if(tsb<-30&&m&&m.sport!=='rest')adv+=`<br>⚠︎ Je vorm is ${tsb}. Maak hier een rustige versie van of schuif hem een dag op.`;
+    else if(tsb>10&&cls==='hard')adv+=`<br>Je bent fris: ideale dag om deze sessie goed neer te zetten.`;
+    if(next&&next.items.length){const nm=TP.main(next.items);adv+=`<div class="muted" style="margin-top:10px;font-size:15px">Morgen: ${esc(nm.title)}</div>`}
+    chip=m?(TP.SPORT[m.sport]||''):''}
+  const doneToday=st.acts.some(a=>dkey(a.date)===dkey(new Date()));
+  $('#today-chip').textContent=doneToday?'✓ gedaan':chip;$('#advice').innerHTML=adv}
+function renderPlan(){if(P())return renderPlanCustom();return renderPlanAuto()}
+function renderPlanAuto(){
+  $('#plan-pills').innerHTML='';
   const s=st.settings,pl=plan();
   const wi=Math.floor((today0()-new Date(s.planStart+'T00:00'))/DAY/7);
   $('#plan-sub').textContent=`${pl.nW} weken · ${s.runsPerWeek}× lopen · MP ${fmtPace(pl.mp)}/km`;
@@ -393,6 +440,14 @@ function renderPlan(){
 
 function fieldsHTML(defs){return defs.map(([k,l,t='number'])=>`<div class="field"><label>${l}</label><input data-k="${k}" type="${t}" value="${esc(st.settings[k])}"></div>`).join('')}
 function renderSet(){
+  const p=P();
+  $('#set-plan').innerHTML=p?`<div style="font-size:17px"><b>${esc(p.name)}</b></div><div class="muted" style="margin-top:4px">${p.weeks.length} weken · ${new Date(p.weeks[0].start+'T00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} t/m ${new Date(p.race&&p.race.date?p.race.date+'T00:00':p.weeks[p.weeks.length-1].start).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}</div>
+      <button class="btn" id="p-import">Ander schema importeren</button><button class="btn danger" id="p-remove">Schema verwijderen</button>
+      <div class="hint">Het schema staat alleen op dit toestel. Op een ander toestel importeer je hetzelfde bestand opnieuw.</div>`
+    :`<div class="muted">Je gebruikt het automatische schema hieronder.</div><button class="btn pri" id="p-import">Schema importeren</button><div class="hint">Kies een schemabestand (.json). Het blijft alleen op dit toestel.</div>`;
+  $('#p-import').onclick=()=>$('#d-file').click();
+  const rm=$('#p-remove');if(rm)rm.onclick=()=>{if(confirm('Eigen schema verwijderen en terug naar het automatische schema?')){delete st.custom;save();renderAll();toast('Schema verwijderd')}};
+  $('#set-race-label').style.display=$('#set-race').style.display=p?'none':'';
   $('#set-phys').innerHTML=fieldsHTML([['hrMax','Max hartslag'],['hrRest','Rusthartslag'],['lthrRun','Drempel-HR lopen'],['lthrBike','Drempel-HR fiets'],['ftp','FTP (W)']])+`<div class="field"><label>Geslacht (TRIMP)</label><select data-k="sex"><option value="m">man</option><option value="f">vrouw</option></select></div>`;
   $('#set-race').innerHTML=fieldsHTML([['raceName','Wedstrijd','text'],['raceDate','Datum','date'],['goal','Doeltijd','text'],['refDist','Referentie (km)'],['refTime','Referentietijd','text'],['planStart','Start schema','date'],['runKmNow','Km/week nu'],['peakKm','Piek km/week'],['longNow','Lange loop nu (km)'],['longMax','Langste loop (km)'],['runsPerWeek','Loopjes/week'],['bikesPerWeek','Fietsritten/week']]);
   $('[data-k=sex]').value=st.settings.sex;
@@ -471,7 +526,12 @@ async function sync(manual){
 /* ---------- data ---------- */
 $('#d-export').onclick=()=>{const b=new Blob([JSON.stringify({...st,strava:{...st.strava,secret:undefined,access:undefined,refresh:undefined}},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`tempo-${dkey(new Date())}.json`;a.click()};
 $('#d-import').onclick=()=>$('#d-file').click();
-$('#d-file').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());st={...st,...j,strava:st.strava};save();renderAll();toast('Geïmporteerd')}catch{toast('Ongeldig bestand')}};
+function importPlan(j){if(!TP.valid(j))return toast('Dit is geen geldig schemabestand');
+  if(!confirm(`Schema "${j.name}" gebruiken (${j.weeks.length} weken)? Je hartslag-, FTP- en wedstrijdinstellingen worden overgenomen uit het schema.`))return;
+  st.custom=j;if(j.settings)for(const[k,v]of Object.entries(j.settings))if(v!=null&&v!=='')st.settings[k]=v;
+  save();renderAll();toast('Schema geïmporteerd')}
+$('#d-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());
+    if(j&&j.kern==='tempo-plan')importPlan(j);else{st={...st,...j,strava:st.strava};save();renderAll();toast('Geïmporteerd')}}catch{toast('Ongeldig bestand')}e.target.value=''};
 $('#d-demo').onclick=()=>{st.acts=st.acts.filter(a=>!a.demo);st.demo=false;save();renderAll();toast('Demodata gewist')};
 $('#d-reset').onclick=()=>{if(confirm('Alles wissen?')){localStorage.removeItem(KEY);st=structuredClone(DEFAULTS);save();renderAll()}};
 
@@ -504,13 +564,16 @@ function classify(x){if(x.sport==='rest')return'rest';
 function publish(){
   const s=st.settings,p=pmc(),now=p[p.length-1]||{ctl:0,atl:0,tsb:0},pl=plan(),start=new Date(s.planStart+'T00:00');
   const days={};
+  if(P()){for(let i=-1;i<=14;i++){const d=new Date(today0());d.setDate(d.getDate()+i);const l=TP.locate(P(),d);if(!l)continue;
+      const m=TP.main(l.items);if(!m)continue;days[dkey(d)]={sport:m.sport==='strength'?'rest':m.sport,t:l.items.filter(x=>x.sport!=='rest'||l.items.length===1).map(x=>x.title).join(' + '),d:m.short||'',cls:TP.dayCls(l.items)}}}
+  else
   for(let i=-1;i<=14;i++){const d=new Date(today0());d.setDate(d.getDate()+i);
     const n=Math.round((d-start)/DAY),wi=Math.floor(n/7);if(n<0||wi>=pl.nW)continue;
     const w=pl.weeks[wi],x=w.days[(d.getDay()+6)%7];
     days[dkey(d)]={sport:x.sport,t:x.t,d:x.d,cls:(w.race&&d.getDay()===0)||dkey(d)===s.raceDate?'race':classify(x)}}
   const wk=st.acts.filter(a=>+new Date(a.date)>Date.now()-7*DAY);
   K.feed.set('tempo',{tsb:Math.round(now.tsb),ctl:Math.round(now.ctl),atl:Math.round(now.atl),form:formState(Math.round(now.tsb)).t,
-    race:{name:s.raceName,date:s.raceDate},days,doneToday:st.acts.some(a=>dkey(a.date)===dkey(new Date())),
+    race:P()&&P().race?{name:P().race.name,date:P().race.date}:{name:s.raceName,date:s.raceDate},days,doneToday:st.acts.some(a=>dkey(a.date)===dkey(new Date())),
     week:{n:wk.length,runKm:Math.round(wk.filter(isRun).reduce((x,a)=>x+a.dist,0)/1000)},demo:!!st.demo});
 }
 

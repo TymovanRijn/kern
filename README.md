@@ -35,6 +35,10 @@ Web Bluetooth werkt in Chrome en Edge (macOS, Windows, Android) en in Bluefy (iO
 
 Safari en een PWA op het beginscherm van iOS ondersteunen geen Web Bluetooth. In Bluefy kan de ochtendcheck de Heart Rate Service van een borstband lezen (RR-intervallen) en daar rMSSD en rusthartslag uit berekenen. Bluefy bewaart gegevens apart van Safari; een gemeten waarde kan als korte code (`KERN-HRV;datum;hrv;rusthartslag`) worden overgezet.
 
+## Eigen trainingsschema
+
+Tempo kan een eigen schema inlezen (Instellingen → Schema importeren). Het schema is een JSON-bestand met `kern: "tempo-plan"`; de opbouw staat bovenin `tempo/schema.js`. Het bestand blijft alleen op het toestel en hoort niet in deze repository (de map `prive/` staat in `.gitignore`). Tempo toont dan elke training met stappen, doelzones, uitleg en wat je werkelijk deed, en geeft het soort dag door aan Eten en Kracht.
+
 ## Schermen
 
 Alle onderdelen delen dezelfde onderschermen (`K.openSheet`). Een open scherm beweegt mee met je vinger en sluit als je naar beneden veegt; de pagina erachter scrolt niet mee. Amifo heeft een eigen versie met hetzelfde gedrag.
