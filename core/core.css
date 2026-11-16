@@ -171,3 +171,5 @@ html.sheet-open,html.sheet-open body{overflow:hidden}
 .sheet.dragging,.scrim.dragging{transition:none}
 .grab{position:relative}
 .grab::after{content:"";position:absolute;left:-60px;right:-60px;top:-12px;bottom:-14px}
+.list.wrap .nm,.list.wrap .ds{white-space:normal}
+.list.wrap .chip{flex:none}

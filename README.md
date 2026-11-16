@@ -28,6 +28,10 @@ Eén persoonlijke web-app (PWA) met meerdere onderdelen die samenwerken. Alles d
   - Alles → Vandaag: check, vorm en schema worden één advies
 - **Back-up.** Eén JSON-bestand met alle onderdelen, te maken en terug te zetten bij Instellingen. Inloggegevens van koppelingen gaan niet mee.
 
+## Dagboek
+
+In de ochtendcheck vink je aan wat je de dag ervoor deed (`journal.js`). De vragen volgen de openbare gedragslijst van het WHOOP-dagboek, vertaald naar het Nederlands; je kiest er zelf welke je volgt. Op het tabblad Herstel vergelijkt Vandaag je HRV en rusthartslag op de ochtend na "ja" met de ochtend na "nee", zodra een gedraging binnen 90 dagen 5× ja en 5× nee heeft.
+
 ## Bluetooth
 
 Web Bluetooth werkt in Chrome en Edge (macOS, Windows, Android) en in Bluefy (iOS); niet in Safari of Firefox. Hart gebruikt naast de standaard Heart Rate Service ook de Polar Measurement Data-service (`fb005c80-…`) voor ruw ECG op 130 Hz.
